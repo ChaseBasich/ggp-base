@@ -17,6 +17,14 @@ import org.ggp.base.util.statemachine.exceptions.TransitionDefinitionException;
 import org.ggp.base.util.statemachine.implementation.prover.ProverStateMachine;
 
 public class AliferousMinimax extends StateMachineGamer {
+	private StateMachine machine;
+	private Role myRole;
+
+	public AliferousMinimax() {
+		machine = getStateMachine();
+		myRole = getRole();
+	}
+
 
 	@Override
 	public StateMachine getInitialStateMachine() {
@@ -28,11 +36,8 @@ public class AliferousMinimax extends StateMachineGamer {
 			throws TransitionDefinitionException, MoveDefinitionException, GoalDefinitionException {
 	}
 
-
 	private int maxScore(MachineState state, Role oponentRole, int alpha, int beta) throws TransitionDefinitionException,
 															MoveDefinitionException, GoalDefinitionException{
-		StateMachine machine = getStateMachine();
-		Role myRole = getRole();
 
 		if(machine.isTerminal(state)) {
 			return machine.getGoal(state, myRole);
@@ -52,7 +57,6 @@ public class AliferousMinimax extends StateMachineGamer {
 
 	private int minScore(MachineState state, Role oponentRole, Move myMove, int alpha, int beta) throws TransitionDefinitionException,
 															MoveDefinitionException, GoalDefinitionException{
-		StateMachine machine = getStateMachine();
 		List<Move> oponentMoves = machine.getLegalMoves(state, oponentRole);
 
 		Map<Role, Integer> indices = machine.getRoleIndices();
@@ -78,10 +82,8 @@ public class AliferousMinimax extends StateMachineGamer {
 	//only for 2-player games
 	private Move bestScore() throws TransitionDefinitionException,
 									MoveDefinitionException, GoalDefinitionException{
-		MachineState state = getCurrentState();
-		Role myRole = getRole();
 
-		StateMachine machine = getStateMachine();
+		MachineState state = getCurrentState();
 		List<Role> allRoles = machine.getRoles();
 
 		//other role
@@ -126,20 +128,15 @@ public class AliferousMinimax extends StateMachineGamer {
 
 	@Override
 	public void stateMachineStop() {
-		// TODO Auto-generated method stub
-
+		System.out.println("done");
 	}
 
 	@Override
 	public void stateMachineAbort() {
-		// TODO Auto-generated method stub
-
 	}
 
 	@Override
 	public void preview(Game g, long timeout) throws GamePreviewException {
-		// TODO Auto-generated method stub
-
 	}
 
 	@Override
