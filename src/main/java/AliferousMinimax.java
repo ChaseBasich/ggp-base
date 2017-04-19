@@ -10,16 +10,18 @@ import org.ggp.base.util.statemachine.MachineState;
 import org.ggp.base.util.statemachine.Move;
 import org.ggp.base.util.statemachine.Role;
 import org.ggp.base.util.statemachine.StateMachine;
+import org.ggp.base.util.statemachine.cache.CachedStateMachine;
 import org.ggp.base.util.statemachine.exceptions.GoalDefinitionException;
 import org.ggp.base.util.statemachine.exceptions.MoveDefinitionException;
 import org.ggp.base.util.statemachine.exceptions.TransitionDefinitionException;
+import org.ggp.base.util.statemachine.implementation.prover.ProverStateMachine;
 
 public class AliferousMinimax extends StateMachineGamer {
 
 	@Override
 	public StateMachine getInitialStateMachine() {
 		// TODO Auto-generated method stub
-		return null;
+		return new CachedStateMachine(new ProverStateMachine());
 	}
 
 	@Override
@@ -30,7 +32,7 @@ public class AliferousMinimax extends StateMachineGamer {
 	}
 
 
-	private int maxScore(MachineState state, Role oponentRole) throws TransitionDefinitionException,
+	private int maxScore(MachineState state, Role oponentRole, int alpha, int beta) throws TransitionDefinitionException,
 															MoveDefinitionException, GoalDefinitionException{
 		StateMachine machine = getStateMachine();
 		Role myRole = getRole();
@@ -41,46 +43,38 @@ public class AliferousMinimax extends StateMachineGamer {
 
 		List<Move> myMoves = machine.getLegalMoves(state, myRole);
 
-		int maxScore = 0;
-
 		for(Move move: myMoves) {
-			int score = minScore(state, oponentRole, move);
-			if (score == 100) {
-				return 100;
-			}
-			if (score > maxScore) {
-				maxScore = score;
+			alpha = Math.max(minScore(state, oponentRole, move, alpha, beta), alpha);
+			if (alpha >= beta) {
+				return beta;
 			}
 		}
 
-		return maxScore;
+		return alpha;
 	}
 
-	private int minScore(MachineState state, Role oponentRole, Move myMove) throws TransitionDefinitionException,
+	private int minScore(MachineState state, Role oponentRole, Move myMove, int alpha, int beta) throws TransitionDefinitionException,
 															MoveDefinitionException, GoalDefinitionException{
 		StateMachine machine = getStateMachine();
 		List<Move> oponentMoves = machine.getLegalMoves(state, oponentRole);
 
 		Map<Role, Integer> indices = machine.getRoleIndices();
 
-		int minScore = 100;
-
 		for(Move move : oponentMoves) {
-			List<Move> currMoves= new ArrayList<Move>(2);
-			currMoves.add(indices.get(oponentRole), move);
-			currMoves.add(indices.get(getRole()), myMove);
+			ArrayList<Move> currMoves= new ArrayList<Move>(2);
+			currMoves.add(move);
+			currMoves.add(move);
+			currMoves.set(indices.get(oponentRole), move);
+			currMoves.set(indices.get(getRole()), myMove);
 
 			MachineState nextState = machine.getNextState(state, currMoves);
 
-			int score = maxScore(nextState, oponentRole);
-			if (score == 0) {
-				return score;
-			}
-			if (score < minScore) {
-				minScore = score;
+			beta = Math.min(maxScore(nextState, oponentRole, alpha, beta), beta);
+			if (beta <= alpha) {
+				return alpha;
 			}
 		}
-		return minScore;
+		return beta;
 	}
 
 
@@ -95,7 +89,7 @@ public class AliferousMinimax extends StateMachineGamer {
 
 		//other role
 		Role oponentRole = allRoles.get(0);
-		if(oponentRole == myRole) {
+		if(oponentRole.equals(myRole)) {
 			oponentRole = allRoles.get(1);
 		}
 
@@ -109,10 +103,10 @@ public class AliferousMinimax extends StateMachineGamer {
 		Random random = new Random();
 
 		int maxScore = 0;
-		Move bestMove = myMoves.get(random.nextInt(myMoves.size() - 1));
+		Move bestMove = myMoves.get(random.nextInt(myMoves.size()));
 
 		for(Move move: myMoves) {
-			int score = minScore(state, oponentRole, move);
+			int score = minScore(state, oponentRole, move, 0, 100);
 			if (score == 100) {
 				return move;
 			}
