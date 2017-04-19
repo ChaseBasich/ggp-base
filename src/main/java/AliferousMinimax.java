@@ -20,15 +20,12 @@ public class AliferousMinimax extends StateMachineGamer {
 
 	@Override
 	public StateMachine getInitialStateMachine() {
-		// TODO Auto-generated method stub
 		return new CachedStateMachine(new ProverStateMachine());
 	}
 
 	@Override
 	public void stateMachineMetaGame(long timeout)
 			throws TransitionDefinitionException, MoveDefinitionException, GoalDefinitionException {
-		// TODO Auto-generated method stub
-
 	}
 
 
