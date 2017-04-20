@@ -1,4 +1,3 @@
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
@@ -17,14 +16,6 @@ import org.ggp.base.util.statemachine.exceptions.TransitionDefinitionException;
 import org.ggp.base.util.statemachine.implementation.prover.ProverStateMachine;
 
 public class AliferousMinimax extends StateMachineGamer {
-	private StateMachine machine;
-	private Role myRole;
-
-	public AliferousMinimax() {
-		machine = getStateMachine();
-		myRole = getRole();
-	}
-
 
 	@Override
 	public StateMachine getInitialStateMachine() {
@@ -36,9 +27,11 @@ public class AliferousMinimax extends StateMachineGamer {
 			throws TransitionDefinitionException, MoveDefinitionException, GoalDefinitionException {
 	}
 
-	private int maxScore(MachineState state, Role oponentRole, int alpha, int beta) throws TransitionDefinitionException,
+	private int maxScore(MachineState state, int alpha, int beta) throws TransitionDefinitionException,
 															MoveDefinitionException, GoalDefinitionException{
 
+		StateMachine machine = getStateMachine();
+		Role myRole = getRole();
 		if(machine.isTerminal(state)) {
 			return machine.getGoal(state, myRole);
 		}
@@ -46,7 +39,7 @@ public class AliferousMinimax extends StateMachineGamer {
 		List<Move> myMoves = machine.getLegalMoves(state, myRole);
 
 		for(Move move: myMoves) {
-			alpha = Math.max(minScore(state, oponentRole, move, alpha, beta), alpha);
+			alpha = Math.max(minScore(state, move, alpha, beta), alpha);
 			if (alpha >= beta) {
 				return beta;
 			}
@@ -55,22 +48,19 @@ public class AliferousMinimax extends StateMachineGamer {
 		return alpha;
 	}
 
-	private int minScore(MachineState state, Role oponentRole, Move myMove, int alpha, int beta) throws TransitionDefinitionException,
+	private int minScore(MachineState state, Move myMove, int alpha, int beta) throws TransitionDefinitionException,
 															MoveDefinitionException, GoalDefinitionException{
-		List<Move> oponentMoves = machine.getLegalMoves(state, oponentRole);
+
+		StateMachine machine = getStateMachine();
+
+		List< List<Move> > jointMoves = machine.getLegalJointMoves(state, getRole(), myMove);
 
 		Map<Role, Integer> indices = machine.getRoleIndices();
 
-		for(Move move : oponentMoves) {
-			ArrayList<Move> currMoves= new ArrayList<Move>(2);
-			currMoves.add(move);
-			currMoves.add(move);
-			currMoves.set(indices.get(oponentRole), move);
-			currMoves.set(indices.get(getRole()), myMove);
+		for(List<Move> moves : jointMoves) {
+			MachineState nextState = machine.getNextState(state, moves);
 
-			MachineState nextState = machine.getNextState(state, currMoves);
-
-			beta = Math.min(maxScore(nextState, oponentRole, alpha, beta), beta);
+			beta = Math.min(maxScore(nextState, alpha, beta), beta);
 			if (beta <= alpha) {
 				return alpha;
 			}
@@ -84,20 +74,10 @@ public class AliferousMinimax extends StateMachineGamer {
 									MoveDefinitionException, GoalDefinitionException{
 
 		MachineState state = getCurrentState();
-		List<Role> allRoles = machine.getRoles();
-
-		//other role
-		Role oponentRole = allRoles.get(0);
-		if(oponentRole.equals(myRole)) {
-			oponentRole = allRoles.get(1);
-		}
-
-
-		assert(allRoles.size() == 2);
-
+		StateMachine machine = getStateMachine();
+		Role myRole = getRole();
 
 		List<Move> myMoves = machine.getLegalMoves(state, myRole);
-
 
 		Random random = new Random();
 
@@ -105,7 +85,7 @@ public class AliferousMinimax extends StateMachineGamer {
 		Move bestMove = myMoves.get(random.nextInt(myMoves.size()));
 
 		for(Move move: myMoves) {
-			int score = minScore(state, oponentRole, move, 0, 100);
+			int score = minScore(state, move, 0, 100);
 			if (score == 100) {
 				return move;
 			}
