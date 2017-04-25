@@ -21,17 +21,24 @@ import org.ggp.base.util.statemachine.implementation.prover.ProverStateMachine;
 public class AliferousMinimax extends StateMachineGamer {
 
 	private static final long MIN_TIME = 5000;
+	private static final long SEARCH_TIME = 2000;
 	private static final long BUF_TIME = 1000;
 
 	private Boolean doneSearching;
 	private Boolean init = false;
 	private ArrayList< HashSet<Move> > totalMoves;
 	private HashSet<MachineState> totalStates;
+	private ArrayList<MachineState> terminalStates;
+	private HashSet<MachineState> terminalStatesSeen;
+	private MachineState savedState;
 
 	@Override
 	public StateMachine getInitialStateMachine() {
 		totalMoves = new ArrayList< HashSet<Move> >();
 		totalStates = new HashSet<MachineState>();
+		terminalStates = new ArrayList<MachineState>();
+		terminalStatesSeen = new HashSet<MachineState>();
+		savedState = null;
 		StateMachine machine = new CachedStateMachine(new ProverStateMachine());
 		return machine;
 	}
@@ -43,6 +50,31 @@ public class AliferousMinimax extends StateMachineGamer {
 
 	private Boolean outOfTime(long timeout) {
 		return timeout - System.currentTimeMillis() <= BUF_TIME;
+	}
+
+	private void findTerminalStates(MachineState state, long startTime) throws MoveDefinitionException,
+																		TransitionDefinitionException {
+		StateMachine machine = getStateMachine();
+		MachineState useState = state;
+		if (savedState != null) {
+			useState = savedState;
+		}
+
+		Random random = new Random();
+
+		while (!machine.isTerminal(useState)) {
+			if(System.currentTimeMillis() - startTime > SEARCH_TIME) {
+				savedState = useState;
+				return;
+			}
+			List< List<Move> > jointMoves = machine.getLegalJointMoves(useState);
+			useState = machine.getNextState(useState, jointMoves.get(random.nextInt(jointMoves.size())));
+		}
+		if (!terminalStatesSeen.contains(useState)) {
+			terminalStates.add(useState);
+			terminalStatesSeen.add(useState);
+		}
+		savedState = null;
 	}
 
 	private int newStateHeuristic(MachineState state) throws TransitionDefinitionException,
@@ -226,6 +258,13 @@ public class AliferousMinimax extends StateMachineGamer {
 			}
 			init = true;
 		}
+
+		long startTime = System.currentTimeMillis();
+		while (System.currentTimeMillis() - startTime < SEARCH_TIME) {
+			findTerminalStates(getCurrentState(), startTime);
+		}
+		System.out.println(terminalStates.size());
+
 		return bestScore(timeout);
 	}
 
@@ -233,13 +272,21 @@ public class AliferousMinimax extends StateMachineGamer {
 	public void stateMachineStop() {
 		System.out.println("done");
 		totalMoves.clear();
+		totalStates.clear();
+		terminalStates.clear();
+		terminalStatesSeen.clear();
+		savedState = null;
 		init = false;
 	}
 
 	@Override
 	public void stateMachineAbort() {
 		totalMoves.clear();
+		totalStates.clear();
 		init = false;
+		terminalStates.clear();
+		terminalStatesSeen.clear();
+		savedState = null;
 	}
 
 	@Override
