@@ -3,10 +3,12 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
+import java.util.Set;
 
 import org.ggp.base.player.gamer.exception.GamePreviewException;
 import org.ggp.base.player.gamer.statemachine.StateMachineGamer;
 import org.ggp.base.util.game.Game;
+import org.ggp.base.util.gdl.grammar.GdlSentence;
 import org.ggp.base.util.statemachine.MachineState;
 import org.ggp.base.util.statemachine.Move;
 import org.ggp.base.util.statemachine.Role;
@@ -134,17 +136,42 @@ public class AliferousMinimax extends StateMachineGamer {
 		return totalScore;//(myMoves.size() * 99) / totalMoves.size();
 	}
 
+	private int goalProximityHeuristic(MachineState state) throws TransitionDefinitionException,
+	MoveDefinitionException, GoalDefinitionException{
+		StateMachine machine = getStateMachine();
+		Role myRole = getRole();
+
+		float score = 0;
+		int closeStates = 0;
+		Set<GdlSentence> stateProps = state.getContents();
+		for(MachineState termState : terminalStatesSeen) {
+			Set<GdlSentence> termStateProps = termState.getContents();
+			Set<GdlSentence> intersection = new HashSet<GdlSentence>(termStateProps);
+			intersection.retainAll(stateProps);
+			float similarity = (float)intersection.size()/termStateProps.size();
+			if(similarity > 0.8) {
+				score +=  similarity * machine.getGoal(termState,myRole);
+				closeStates++;
+			}
+		}
+		if(closeStates == 0) return 0;
+		return (int) (score / closeStates);
+	}
+
 	private int heuristicEval(MachineState state) throws TransitionDefinitionException,
 													MoveDefinitionException, GoalDefinitionException{
 		StateMachine machine = getStateMachine();
 		List<Role> roles = machine.getRoles();
-		int score = mobilityHeuristic(state) / roles.size();
-		float weight = (float)(roles.size() - 1) / (float)roles.size();
-		score += focusHeuristic(state) * weight;
 
-		score *= .66;
-		score += .33 * newStateHeuristic(state);
-		return score;
+		float numRolesRecip = 1 / (float) roles.size();
+		float score = numRolesRecip * mobilityHeuristic(state) + (1 - numRolesRecip) * focusHeuristic(state);
+
+		if(goalProximityHeuristic(state) == 0)
+			score = 2/3 * score + 1/3 * newStateHeuristic(state);
+		else
+			score = 1/2 * score + 1/4 * newStateHeuristic(state) + 1/4 * goalProximityHeuristic(state);
+
+		return (int) score;
 	}
 
 	private int maxScore(MachineState state, int alpha, int beta, int level, int max_level, long timeout) throws TransitionDefinitionException,
