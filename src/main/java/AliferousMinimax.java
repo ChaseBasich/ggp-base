@@ -301,6 +301,8 @@ public class AliferousMinimax extends StateMachineGamer {
 		terminalStates.clear();
 		terminalStatesSeen.clear();
 		savedState = null;
+		totalScores = 0;
+		maxScoreFound = 0;
 	}
 
 	@Override
