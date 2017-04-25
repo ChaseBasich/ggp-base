@@ -24,6 +24,9 @@ public class AliferousMinimax extends StateMachineGamer {
 	private static final long SEARCH_TIME = 2000;
 	private static final long BUF_TIME = 1000;
 
+	private int maxScoreFound;
+	private int totalScores;
+
 	private Boolean doneSearching;
 	private Boolean init = false;
 	private ArrayList< HashSet<Move> > totalMoves;
@@ -39,6 +42,8 @@ public class AliferousMinimax extends StateMachineGamer {
 		terminalStates = new ArrayList<MachineState>();
 		terminalStatesSeen = new HashSet<MachineState>();
 		savedState = null;
+		maxScoreFound = 0;
+		totalScores = 0;
 		StateMachine machine = new CachedStateMachine(new ProverStateMachine());
 		return machine;
 	}
@@ -53,7 +58,7 @@ public class AliferousMinimax extends StateMachineGamer {
 	}
 
 	private void findTerminalStates(MachineState state, long startTime) throws MoveDefinitionException,
-																		TransitionDefinitionException {
+																		TransitionDefinitionException, GoalDefinitionException {
 		StateMachine machine = getStateMachine();
 		MachineState useState = state;
 		if (savedState != null) {
@@ -73,6 +78,11 @@ public class AliferousMinimax extends StateMachineGamer {
 		if (!terminalStatesSeen.contains(useState)) {
 			terminalStates.add(useState);
 			terminalStatesSeen.add(useState);
+		}
+		int score = machine.getGoal(useState, getRole());
+		totalScores += score;
+		if (score > maxScoreFound) {
+			maxScoreFound = score;
 		}
 		savedState = null;
 	}
@@ -264,6 +274,8 @@ public class AliferousMinimax extends StateMachineGamer {
 			findTerminalStates(getCurrentState(), startTime);
 		}
 		System.out.println(terminalStates.size());
+		System.out.println("Max Score = " + Integer.toString(maxScoreFound));
+		System.out.println("Average Score = " + Integer.toString(totalScores / terminalStates.size()));
 
 		return bestScore(timeout);
 	}
@@ -277,6 +289,8 @@ public class AliferousMinimax extends StateMachineGamer {
 		terminalStatesSeen.clear();
 		savedState = null;
 		init = false;
+		totalScores = 0;
+		maxScoreFound = 0;
 	}
 
 	@Override
