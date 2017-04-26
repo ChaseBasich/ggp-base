@@ -20,10 +20,10 @@ import org.ggp.base.util.statemachine.exceptions.TransitionDefinitionException;
 import org.ggp.base.util.statemachine.implementation.prover.ProverStateMachine;
 
 
-public class AliferousMinimax extends StateMachineGamer {
+public class AliferousExperimental extends StateMachineGamer {
 
 	private static final long MIN_TIME = 5000;
-	private static final long SEARCH_TIME = 500;
+	private static final long SEARCH_TIME = 0;
 	private static final long BUF_TIME = 1500;
 
 	private int maxScoreFound;
@@ -53,10 +53,10 @@ public class AliferousMinimax extends StateMachineGamer {
 	@Override
 	public void stateMachineMetaGame(long timeout)
 			throws TransitionDefinitionException, MoveDefinitionException, GoalDefinitionException {
-		long startTime = System.currentTimeMillis();
+		/*long startTime = System.currentTimeMillis();
 		while (timeout - System.currentTimeMillis() > BUF_TIME) {
 			findTerminalStates(getCurrentState(), startTime, timeout - System.currentTimeMillis() - BUF_TIME);
-		}
+		}*/
 	}
 
 	private Boolean outOfTime(long timeout) {
@@ -173,20 +173,21 @@ public class AliferousMinimax extends StateMachineGamer {
 		List<Role> roles = machine.getRoles();
 
 		float numRolesRecip = 1.0f / (float) roles.size();
-		float mobilityFocusScore = numRolesRecip * mobilityHeuristic(state) + (1.0f - numRolesRecip) * focusHeuristic(state);
+		float mobilityScore = numRolesRecip * mobilityHeuristic(state);
+		float focusScore = (1.0f - numRolesRecip) * focusHeuristic(state);
 
 		//if(goalProximityHeuristic(state) == 0)
 		//	score = 2/3 * score + 1/3 * newStateHeuristic(state);
 		//else
-		float stateScore = newStateHeuristic(state);
-		float goalScore = goalProximityHeuristic(state);
-		float score = .33f * mobilityFocusScore + .33f * goalScore + .33f * machine.getGoal(state, getRole());
+		//float stateScore = newStateHeuristic(state);
+		//float goalScore = goalProximityHeuristic(state);
+		float score = .2f * mobilityScore + .6f * focusScore + .2f * machine.getGoal(state, getRole());
 
 
 		if ((int)score >= 100) {
 			System.out.println("TotalScore: " + Float.toString(score));
-			System.out.println("mobilityScore: " + Float.toString(mobilityFocusScore));
-			System.out.println("goalScore: " + Float.toString(goalScore));
+			//System.out.println("mobilityScore: " + Float.toString(mobilityFocusScore));
+			//System.out.println("goalScore: " + Float.toString(goalScore));
 			System.out.println("Temp score: " + Float.toString(machine.getGoal(state, getRole())));
 		}
 
@@ -355,7 +356,7 @@ public class AliferousMinimax extends StateMachineGamer {
 
 	@Override
 	public String getName() {
-		return "Aliferous-Minimax";
+		return "Aliferous-Experimental";
 	}
 
 }
