@@ -53,13 +53,17 @@ public class AliferousMinimax extends StateMachineGamer {
 	@Override
 	public void stateMachineMetaGame(long timeout)
 			throws TransitionDefinitionException, MoveDefinitionException, GoalDefinitionException {
+		long startTime = System.currentTimeMillis();
+		while (timeout - System.currentTimeMillis() > BUF_TIME) {
+			findTerminalStates(getCurrentState(), startTime, timeout - System.currentTimeMillis() - BUF_TIME);
+		}
 	}
 
 	private Boolean outOfTime(long timeout) {
 		return timeout - System.currentTimeMillis() <= BUF_TIME;
 	}
 
-	private void findTerminalStates(MachineState state, long startTime) throws MoveDefinitionException,
+	private void findTerminalStates(MachineState state, long startTime, long searchTime) throws MoveDefinitionException,
 																		TransitionDefinitionException, GoalDefinitionException {
 		StateMachine machine = getStateMachine();
 		MachineState useState = state;
@@ -70,7 +74,7 @@ public class AliferousMinimax extends StateMachineGamer {
 		Random random = new Random();
 
 		while (!machine.isTerminal(useState)) {
-			if(System.currentTimeMillis() - startTime > SEARCH_TIME) {
+			if(System.currentTimeMillis() - startTime > searchTime) {
 				savedState = useState;
 				return;
 			}
@@ -317,7 +321,7 @@ public class AliferousMinimax extends StateMachineGamer {
 
 		long startTime = System.currentTimeMillis();
 		while (System.currentTimeMillis() - startTime < SEARCH_TIME) {
-			findTerminalStates(getCurrentState(), startTime);
+			findTerminalStates(getCurrentState(), startTime, SEARCH_TIME);
 		}
 		int totalStates = terminalStates.size();
 		System.out.println("Number of terminal states found = " + Integer.toString(totalStates));
