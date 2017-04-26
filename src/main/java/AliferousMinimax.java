@@ -117,7 +117,8 @@ public class AliferousMinimax extends StateMachineGamer {
 		Role myRole = getRole();
 		List<Move> myMoves = machine.getLegalMoves(state, myRole);
 		Map<Role, Integer> roleMap = machine.getRoleIndices();
-		return (myMoves.size() * 99) / totalMoves.get(roleMap.get(myRole)).size();
+		totalMoves.get(roleMap.get(myRole)).addAll(myMoves);
+		return (int) (((float)myMoves.size() * 99.0f) / (float)totalMoves.get(roleMap.get(myRole)).size());
 	}
 
 	private int focusHeuristic(MachineState state) throws TransitionDefinitionException,
@@ -177,10 +178,13 @@ public class AliferousMinimax extends StateMachineGamer {
 		float goalScore = goalProximityHeuristic(state);
 		float score = .33f * mobilityFocusScore + .33f * goalScore + .33f * machine.getGoal(state, getRole());
 
-		System.out.println("TotalScore: " + Float.toString(score));
-		System.out.println("mobilityScore: " + Float.toString(mobilityFocusScore));
-		System.out.println("goalScore: " + Float.toString(goalScore));
 
+		if ((int)score >= 100) {
+			System.out.println("TotalScore: " + Float.toString(score));
+			System.out.println("mobilityScore: " + Float.toString(mobilityFocusScore));
+			System.out.println("goalScore: " + Float.toString(goalScore));
+			System.out.println("Temp score: " + Float.toString(machine.getGoal(state, getRole())));
+		}
 
 		return (int) score;
 	}
@@ -197,7 +201,8 @@ public class AliferousMinimax extends StateMachineGamer {
 
 		if (level > max_level || outOfTime(timeout)) {
 			doneSearching = false;
-			return heuristicEval(state);
+			int score = heuristicEval(state);
+			return score;
 		}
 
 		List<Move> myMoves = machine.getLegalMoves(state, myRole);
@@ -211,7 +216,6 @@ public class AliferousMinimax extends StateMachineGamer {
 				return beta;
 			}
 		}
-
 		return alpha;
 	}
 
@@ -226,7 +230,8 @@ public class AliferousMinimax extends StateMachineGamer {
 
 		if (outOfTime(timeout)) {
 			doneSearching = false;
-			return heuristicEval(state);
+			int score = heuristicEval(state);
+			return score;
 		}
 
 		Map<Role, Integer> roleMap = machine.getRoleIndices();
@@ -288,6 +293,7 @@ public class AliferousMinimax extends StateMachineGamer {
 			}
 			if (doneSearching) break;
 			max_depth++;
+			System.out.println("Moving to depth of " + Integer.toString(max_depth));
 			doneSearching = true;
 		}
 
@@ -313,10 +319,13 @@ public class AliferousMinimax extends StateMachineGamer {
 		while (System.currentTimeMillis() - startTime < SEARCH_TIME) {
 			findTerminalStates(getCurrentState(), startTime);
 		}
-		System.out.println(terminalStates.size());
+		int totalStates = terminalStates.size();
+		System.out.println("Number of terminal states found = " + Integer.toString(totalStates));
 		System.out.println("Max Score = " + Integer.toString(maxScoreFound));
-		System.out.println("Average Score = " + Integer.toString(totalScores / terminalStates.size()));
-
+		if (totalStates != 0){
+			System.out.println("Average Score = " + Integer.toString(totalScores / terminalStates.size()));
+		}
+		System.out.println("Finding best score");
 		return bestScore(timeout);
 	}
 
