@@ -23,8 +23,8 @@ import org.ggp.base.util.statemachine.implementation.prover.ProverStateMachine;
 public class AliferousMinimax extends StateMachineGamer {
 
 	private static final long MIN_TIME = 5000;
-	private static final long SEARCH_TIME = 2000;
-	private static final long BUF_TIME = 1000;
+	private static final long SEARCH_TIME = 500;
+	private static final long BUF_TIME = 1500;
 
 	private int maxScoreFound;
 	private int totalScores;
@@ -77,12 +77,12 @@ public class AliferousMinimax extends StateMachineGamer {
 			List< List<Move> > jointMoves = machine.getLegalJointMoves(useState);
 			useState = machine.getNextState(useState, jointMoves.get(random.nextInt(jointMoves.size())));
 		}
+		int score = machine.getGoal(useState, getRole());
 		if (!terminalStatesSeen.contains(useState)) {
 			terminalStates.add(useState);
 			terminalStatesSeen.add(useState);
+			totalScores += score;
 		}
-		int score = machine.getGoal(useState, getRole());
-		totalScores += score;
 		if (score > maxScoreFound) {
 			maxScoreFound = score;
 		}
@@ -107,7 +107,7 @@ public class AliferousMinimax extends StateMachineGamer {
 				seenState++;
 			}
 		}
-		return (int)(99.0 * (float)newState / (seenState + newState));
+		return (int)(99.0 * (float)newState / (float)(seenState + newState));
 	}
 
 
@@ -141,6 +141,8 @@ public class AliferousMinimax extends StateMachineGamer {
 		StateMachine machine = getStateMachine();
 		Role myRole = getRole();
 
+		float averageScore = (float)totalScores / (float)terminalStatesSeen.size();
+
 		float score = 0;
 		int closeStates = 0;
 		Set<GdlSentence> stateProps = state.getContents();
@@ -149,13 +151,15 @@ public class AliferousMinimax extends StateMachineGamer {
 			Set<GdlSentence> intersection = new HashSet<GdlSentence>(termStateProps);
 			intersection.retainAll(stateProps);
 			float similarity = (float)intersection.size()/termStateProps.size();
-			if(similarity > 0.8) {
-				score +=  similarity * machine.getGoal(termState,myRole);
-				closeStates++;
+			float currScore = (float)machine.getGoal(termState, myRole);
+			if (Math.abs(currScore - averageScore) < averageScore / 2.0f ||
+					similarity < .65f) {
+				continue;
 			}
+			score +=  similarity * (currScore - averageScore);
+			closeStates++;
 		}
-		if(closeStates == 0) return 0;
-		return (int) (score / closeStates);
+		return (int) (score / (float)closeStates);
 	}
 
 	private int heuristicEval(MachineState state) throws TransitionDefinitionException,
@@ -163,13 +167,20 @@ public class AliferousMinimax extends StateMachineGamer {
 		StateMachine machine = getStateMachine();
 		List<Role> roles = machine.getRoles();
 
-		float numRolesRecip = 1 / (float) roles.size();
-		float score = numRolesRecip * mobilityHeuristic(state) + (1 - numRolesRecip) * focusHeuristic(state);
+		float numRolesRecip = 1.0f / (float) roles.size();
+		float mobilityFocusScore = numRolesRecip * mobilityHeuristic(state) + (1.0f - numRolesRecip) * focusHeuristic(state);
 
-		if(goalProximityHeuristic(state) == 0)
-			score = 2/3 * score + 1/3 * newStateHeuristic(state);
-		else
-			score = 1/2 * score + 1/4 * newStateHeuristic(state) + 1/4 * goalProximityHeuristic(state);
+		//if(goalProximityHeuristic(state) == 0)
+		//	score = 2/3 * score + 1/3 * newStateHeuristic(state);
+		//else
+		float stateScore = newStateHeuristic(state);
+		float goalScore = goalProximityHeuristic(state);
+		float score = .33f * mobilityFocusScore + .33f * goalScore + .33f * machine.getGoal(state, getRole());
+
+		System.out.println("TotalScore: " + Float.toString(score));
+		System.out.println("mobilityScore: " + Float.toString(mobilityFocusScore));
+		System.out.println("goalScore: " + Float.toString(goalScore));
+
 
 		return (int) score;
 	}
@@ -263,6 +274,7 @@ public class AliferousMinimax extends StateMachineGamer {
 		Map<Role, Integer> roleMap = machine.getRoleIndices();
 		//todo: also, if it finds something before time runs out
 		while (timeout - System.currentTimeMillis() > BUF_TIME) {
+			maxScore = 0;
 			for(Move move: myMoves) {
 				totalMoves.get(roleMap.get(myRole)).add(move);
 				int score = minScore(state, move, 0, 100, 0, max_depth, timeout);
@@ -277,8 +289,9 @@ public class AliferousMinimax extends StateMachineGamer {
 			if (doneSearching) break;
 			max_depth++;
 			doneSearching = true;
-			maxScore = 0;
 		}
+
+		System.out.println("Best Score this round: " + Integer.toString(maxScore));
 
 		return bestMove;
 	}
