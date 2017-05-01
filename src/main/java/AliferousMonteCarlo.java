@@ -20,7 +20,7 @@ import org.ggp.base.util.statemachine.exceptions.TransitionDefinitionException;
 import org.ggp.base.util.statemachine.implementation.prover.ProverStateMachine;
 
 
-public class AliferousExperimental extends StateMachineGamer {
+public class AliferousMonteCarlo extends StateMachineGamer {
 
 	private static final long MIN_TIME = 3000;
 	private static final long SEARCH_TIME = 0;
@@ -399,7 +399,7 @@ public class AliferousExperimental extends StateMachineGamer {
 
 	@Override
 	public String getName() {
-		return "Aliferous-Experimental";
+		return "Aliferous-MonteCarlo";
 	}
 
 }
