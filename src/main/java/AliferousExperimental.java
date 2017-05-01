@@ -22,9 +22,10 @@ import org.ggp.base.util.statemachine.implementation.prover.ProverStateMachine;
 
 public class AliferousExperimental extends StateMachineGamer {
 
-	private static final long MIN_TIME = 5000;
+	private static final long MIN_TIME = 3000;
 	private static final long SEARCH_TIME = 0;
 	private static final long BUF_TIME = 1500;
+	private static final int NUM_CHARGES = 4;
 
 	private int maxScoreFound;
 	private int totalScores;
@@ -53,10 +54,10 @@ public class AliferousExperimental extends StateMachineGamer {
 	@Override
 	public void stateMachineMetaGame(long timeout)
 			throws TransitionDefinitionException, MoveDefinitionException, GoalDefinitionException {
-		/*long startTime = System.currentTimeMillis();
-		while (timeout - System.currentTimeMillis() > BUF_TIME) {
-			findTerminalStates(getCurrentState(), startTime, timeout - System.currentTimeMillis() - BUF_TIME);
-		}*/
+	}
+
+	private Boolean searchTime (long timeout) {
+		return timeout - System.currentTimeMillis() <= MIN_TIME;
 	}
 
 	private Boolean outOfTime(long timeout) {
@@ -194,6 +195,24 @@ public class AliferousExperimental extends StateMachineGamer {
 		return (int) score;
 	}
 
+	private int depthCharge(MachineState state) throws GoalDefinitionException, MoveDefinitionException, TransitionDefinitionException {
+		StateMachine machine = getStateMachine();
+		if (machine.isTerminal(state)) {
+			return machine.getGoal(state, getRole());
+		}
+		List<Move> moves = machine.getRandomJointMove(state);
+		MachineState nextState = machine.getNextState(state, moves);
+		return depthCharge(nextState);
+	}
+
+	private int monteCarlo(MachineState state, int numCharges) throws MoveDefinitionException, GoalDefinitionException, TransitionDefinitionException {
+		int total = 0;
+		for (int i = 0; i < numCharges; i++) {
+			total += depthCharge(state);
+		}
+		return total / numCharges;
+	}
+
 	private int maxScore(MachineState state, int alpha, int beta, int level, int max_level, long timeout) throws TransitionDefinitionException,
 															MoveDefinitionException, GoalDefinitionException{
 
@@ -204,9 +223,13 @@ public class AliferousExperimental extends StateMachineGamer {
 			return machine.getGoal(state, myRole);
 		}
 
-		if (level > max_level || outOfTime(timeout)) {
+		if (outOfTime(timeout)) {
 			doneSearching = false;
-			int score = heuristicEval(state);
+			return heuristicEval(state);
+		}
+		if (level > max_level || searchTime(timeout)) {
+			doneSearching = false;
+			int score = monteCarlo(state, NUM_CHARGES);
 			return score;
 		}
 
@@ -235,7 +258,12 @@ public class AliferousExperimental extends StateMachineGamer {
 
 		if (outOfTime(timeout)) {
 			doneSearching = false;
-			int score = heuristicEval(state);
+			return heuristicEval(state);
+		}
+		if (searchTime(timeout)) {
+			doneSearching = false;
+			//int score = heuristicEval(state);
+			int score = monteCarlo(state, NUM_CHARGES);
 			return score;
 		}
 
@@ -283,8 +311,8 @@ public class AliferousExperimental extends StateMachineGamer {
 
 		Map<Role, Integer> roleMap = machine.getRoleIndices();
 		//todo: also, if it finds something before time runs out
+		maxScore = 0;
 		while (timeout - System.currentTimeMillis() > BUF_TIME) {
-			maxScore = 0;
 			for(Move move: myMoves) {
 				totalMoves.get(roleMap.get(myRole)).add(move);
 				int score = minScore(state, move, 0, 100, 0, max_depth, timeout);
@@ -298,6 +326,7 @@ public class AliferousExperimental extends StateMachineGamer {
 			}
 			if (doneSearching) break;
 			max_depth++;
+			System.out.println("Moving to depth: " + Integer.toString(max_depth));
 			doneSearching = true;
 		}
 
@@ -321,7 +350,6 @@ public class AliferousExperimental extends StateMachineGamer {
 		while (System.currentTimeMillis() - startTime < SEARCH_TIME) {
 			findTerminalStates(getCurrentState(), startTime, SEARCH_TIME);
 		}
-		int totalStates = terminalStates.size();
 		return bestScore(timeout);
 	}
 
