@@ -20,7 +20,7 @@ import org.ggp.base.util.statemachine.exceptions.TransitionDefinitionException;
 import org.ggp.base.util.statemachine.implementation.prover.ProverStateMachine;
 
 
-public class AliferousMonteCarlo extends StateMachineGamer {
+public class AliferousMCTS extends StateMachineGamer {
 
 	private static final long MIN_TIME = 3000;
 	private static final long SEARCH_TIME = 0;
@@ -30,6 +30,8 @@ public class AliferousMonteCarlo extends StateMachineGamer {
 	private int maxScoreFound;
 	private int totalScores;
 
+	private Node currNode;
+
 	private Boolean doneSearching;
 	private Boolean init = false;
 	private ArrayList< HashSet<Move> > totalMoves;
@@ -38,12 +40,17 @@ public class AliferousMonteCarlo extends StateMachineGamer {
 	private HashSet<MachineState> terminalStatesSeen;
 	private MachineState savedState;
 
+	//monte carlo tree information
+	//private HashMap<MachineState, Node> stateMetaData;
+
 	@Override
 	public StateMachine getInitialStateMachine() {
 		totalMoves = new ArrayList< HashSet<Move> >();
 		totalStates = new HashSet<MachineState>();
 		terminalStates = new ArrayList<MachineState>();
 		terminalStatesSeen = new HashSet<MachineState>();
+
+
 		savedState = null;
 		maxScoreFound = 0;
 		totalScores = 0;
@@ -54,6 +61,12 @@ public class AliferousMonteCarlo extends StateMachineGamer {
 	@Override
 	public void stateMachineMetaGame(long timeout)
 			throws TransitionDefinitionException, MoveDefinitionException, GoalDefinitionException {
+		StateMachine machine = getStateMachine();
+		MachineState state = machine.getInitialState();
+		Node initialNode = new Node(state, null);
+		while(!searchTime(timeout)) {
+			monteCarlo(state, timeout);
+		}
 	}
 
 	private Boolean searchTime (long timeout) {
@@ -63,6 +76,10 @@ public class AliferousMonteCarlo extends StateMachineGamer {
 	private Boolean outOfTime(long timeout) {
 		return timeout - System.currentTimeMillis() <= BUF_TIME;
 	}
+
+	//---------------------------------------------------------------------------------------------
+	//Heuristic Eval Methods
+	//---------------------------------------------------------------------------------------------
 
 	private void findTerminalStates(MachineState state, long startTime, long searchTime) throws MoveDefinitionException,
 																		TransitionDefinitionException, GoalDefinitionException {
@@ -195,7 +212,16 @@ public class AliferousMonteCarlo extends StateMachineGamer {
 		return (int) score;
 	}
 
-	private int depthCharge(MachineState state, long timeout) throws GoalDefinitionException,
+
+
+
+
+
+
+	//---------------------------------------------------------------------------------------------
+	//Monte Carlo Search Methods
+	//---------------------------------------------------------------------------------------------
+	private float depthCharge(MachineState state, long timeout) throws GoalDefinitionException,
 																MoveDefinitionException, TransitionDefinitionException {
 		StateMachine machine = getStateMachine();
 		if (machine.isTerminal(state)) {
@@ -209,24 +235,112 @@ public class AliferousMonteCarlo extends StateMachineGamer {
 		return depthCharge(nextState, timeout);
 	}
 
-	private int monteCarlo(MachineState state, int numCharges, long timeout) throws MoveDefinitionException,
+	private float selectionScore(Node node, Node parentNode) {
+		float score = node.getScore();
+
+		score += Math.sqrt(2*Math.log(parentNode.getNumVisits())/node.getNumVisits());
+		return score;
+	}
+
+	private Node select(Node node, long timeout) throws MoveDefinitionException,
+														GoalDefinitionException, TransitionDefinitionException {
+		if (node.getNumVisits() == 0) {
+			return node;
+		}
+
+		ArrayList<Node> childNodes = node.getChildren();
+		for (Node childNode : childNodes) {
+			if (childNode.getNumVisits() == 0) {
+				return childNode;
+			}
+		}
+
+		float maxScore = 0;
+		Node bestNode = node;
+
+		for (Node childNode : childNodes) {
+			float newScore = selectionScore(childNode, node);
+			if (newScore > maxScore) {
+				maxScore = newScore;
+				bestNode = childNode;
+			}
+		}
+		return select(bestNode, timeout);
+	}
+
+	private void expand(Node node) throws MoveDefinitionException, TransitionDefinitionException {
+		StateMachine machine = getStateMachine();
+		MachineState state = node.getState();
+		List< List<Move> > jointMoves = machine.getLegalJointMoves(state);
+
+		for (List<Move> jointMove : jointMoves) {
+			MachineState nextState = machine.getNextState(state, jointMove);
+
+			Node childNode;
+			if (stateMetaData.containsKey(nextState)) {
+				childNode = stateMetaData.get(nextState);
+				childNode.addParent(node);
+			}
+			else {
+				childNode = new Node(nextState, node);
+				stateMetaData.put(nextState, childNode);
+			}
+			node.addChild(childNode);
+		}
+	}
+
+	private float simulate(Node node, long timeout) throws GoalDefinitionException, MoveDefinitionException, TransitionDefinitionException {
+		float total = 0;
+		for (int i = 0; i < NUM_CHARGES; i++) {
+			total += depthCharge(node.getState(), timeout);
+		}
+		return total / NUM_CHARGES;
+	}
+
+	private void backpropagate(Node node, float score) {
+		node.addVisit();
+		node.setScore(node.getScore() + score);
+		for (Node parent : node.getParents()) {
+			backpropagate(parent, score);
+		}
+	}
+
+
+	private float monteCarlo(MachineState state, long timeout) throws MoveDefinitionException,
 																GoalDefinitionException, TransitionDefinitionException {
-		int total = 0;
 		if (outOfTime(timeout)) {
 			return 0;
 		}
-		for (int i = 0; i < numCharges; i++) {
-			total += depthCharge(state, timeout);
+
+		Node node;
+
+		if (stateMetaData.containsKey(state)) {
+			node = stateMetaData.get(state);
 		}
-		return total / numCharges;
+		else {
+			node = new Node(state, null);
+			stateMetaData.put(state, node);
+			System.out.println("Root node");
+		}
+
+		Node selected = select(node, timeout);
+		expand(selected);
+		float score = simulate(selected, timeout);
+		backpropagate(selected, score);
+
+		return node.getScore();
 	}
+
+
+	//---------------------------------------------------------------------------------------------
+	//Minimax Methods
+	//---------------------------------------------------------------------------------------------
 
 	private int maxScore(MachineState state, int alpha, int beta, int level, int max_level, long timeout) throws TransitionDefinitionException,
 															MoveDefinitionException, GoalDefinitionException{
 
 		StateMachine machine = getStateMachine();
 		Role myRole = getRole();
-		totalStates.add(state);
 		if(machine.isTerminal(state)) {
 			return machine.getGoal(state, myRole);
 		}
@@ -237,7 +351,7 @@ public class AliferousMonteCarlo extends StateMachineGamer {
 		}
 		if (level > max_level || searchTime(timeout)) {
 			doneSearching = false;
-			alpha = monteCarlo(state, NUM_CHARGES, timeout);
+			alpha = Math.max((int)monteCarlo(state, timeout), alpha);
 			if (alpha >= beta) {
 				return beta;
 			}
@@ -274,7 +388,7 @@ public class AliferousMonteCarlo extends StateMachineGamer {
 		if (searchTime(timeout)) {
 			doneSearching = false;
 			//int score = heuristicEval(state);
-			beta = Math.min(monteCarlo(state, NUM_CHARGES, timeout), beta);
+			beta = Math.min((int)monteCarlo(state, timeout), beta);
 			if (beta <= alpha) {
 				return beta;
 			}
@@ -341,7 +455,6 @@ public class AliferousMonteCarlo extends StateMachineGamer {
 			}
 			if (doneSearching) break;
 			max_depth++;
-			System.out.println("Moving to depth: " + Integer.toString(max_depth));
 			doneSearching = true;
 		}
 
@@ -349,9 +462,32 @@ public class AliferousMonteCarlo extends StateMachineGamer {
 	}
 
 
+	private void getCurrentStateNode() {
+		StateMachine machine = getStateMachine();
+		if (currNode == null) {
+			currNode = new Node(getCurrentState(), null);
+		}
+		else {
+			Boolean foundNode = false;
+			for (Node childNode : currNode.getChildren()) {
+				if (childNode.getState().equals(getCurrentState())) {
+					currNode = childNode;
+					foundNode = true;
+					break;
+				}
+			}
+			if (!foundNode) {
+				currNode = new Node(getCurrentState(), null);
+			}
+		}
+		currNode.setParent(null);
+	}
+
 	@Override
 	public Move stateMachineSelectMove(long  timeout)
 			throws TransitionDefinitionException, MoveDefinitionException, GoalDefinitionException {
+
+		getCurrentStateNode();
 
 		if (!init) {
 			StateMachine machine = getStateMachine();
@@ -360,21 +496,16 @@ public class AliferousMonteCarlo extends StateMachineGamer {
 			}
 			init = true;
 		}
-
-		long startTime = System.currentTimeMillis();
-		while (System.currentTimeMillis() - startTime < SEARCH_TIME) {
-			findTerminalStates(getCurrentState(), startTime, SEARCH_TIME);
-		}
 		return bestScore(timeout);
 	}
 
-	@Override
-	public void stateMachineStop() {
+	private void cleanData() {
 		System.out.println("done");
 		totalMoves.clear();
 		totalStates.clear();
 		terminalStates.clear();
 		terminalStatesSeen.clear();
+
 		savedState = null;
 		init = false;
 		totalScores = 0;
@@ -382,15 +513,13 @@ public class AliferousMonteCarlo extends StateMachineGamer {
 	}
 
 	@Override
+	public void stateMachineStop() {
+		cleanData();
+	}
+
+	@Override
 	public void stateMachineAbort() {
-		totalMoves.clear();
-		totalStates.clear();
-		init = false;
-		terminalStates.clear();
-		terminalStatesSeen.clear();
-		savedState = null;
-		totalScores = 0;
-		maxScoreFound = 0;
+		cleanData();
 	}
 
 	@Override
@@ -399,7 +528,7 @@ public class AliferousMonteCarlo extends StateMachineGamer {
 
 	@Override
 	public String getName() {
-		return "Aliferous-Experimental";
+		return "Aliferous-MonteCarlo";
 	}
 
 }

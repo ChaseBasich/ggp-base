@@ -7,7 +7,7 @@ public class Node {
 	private int numVisits;
 	private float score;
 	private ArrayList<Node> childNodes;
-	private ArrayList<Node> parentNodes;
+	private Node parentNode;
 	private MachineState state;
 
 	public Node(MachineState newState, Node parent) {
@@ -15,10 +15,7 @@ public class Node {
 		score = 0;
 		childNodes = new ArrayList<Node>();
 		state = newState;
-		parentNodes = new ArrayList<Node>();
-		if (parent != null) {
-			parentNodes.add(parent);
-		}
+		parentNode = parent;
 	}
 
 	//get/set methods
@@ -46,12 +43,12 @@ public class Node {
 		childNodes.add(child);
 	}
 
-	public ArrayList<Node> getParents() {
-		return parentNodes;
+	public Node getParent() {
+		return parentNode;
 	}
 
-	public void addParent(Node parent) {
-		parentNodes.add(parent);
+	public void setParent(Node parent) {
+		parentNode = parent;
 	}
 
 	public MachineState getState() {
