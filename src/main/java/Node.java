@@ -1,6 +1,7 @@
 import java.util.ArrayList;
 
 import org.ggp.base.util.statemachine.MachineState;
+import org.ggp.base.util.statemachine.Move;
 
 public class Node {
 	//private variables
@@ -9,13 +10,17 @@ public class Node {
 	private ArrayList<Node> childNodes;
 	private Node parentNode;
 	private MachineState state;
+	private Boolean maxNode;
+	private Move move;
 
-	public Node(MachineState newState, Node parent) {
+	public Node(MachineState newState, Node parent, Move newMove, Boolean max) {
 		numVisits = 0;
 		score = 0;
 		childNodes = new ArrayList<Node>();
 		state = newState;
 		parentNode = parent;
+		move = newMove;
+		maxNode = max; //if newMove is null, then this is a max node
 	}
 
 	//get/set methods
@@ -24,7 +29,7 @@ public class Node {
 	}
 
 	public float getScore() {
-		return score;
+		return score / numVisits;
 	}
 
 	public void addVisit() {
@@ -53,5 +58,13 @@ public class Node {
 
 	public MachineState getState() {
 		return state;
+	}
+
+	public Boolean isMaxNode() {
+		return maxNode;
+	}
+
+	public Move getMove() {
+		return move;
 	}
 }

@@ -237,11 +237,7 @@ public class AliferousMonteCarlo extends StateMachineGamer {
 		}
 		if (level > max_level || searchTime(timeout)) {
 			doneSearching = false;
-			alpha = monteCarlo(state, NUM_CHARGES, timeout);
-			if (alpha >= beta) {
-				return beta;
-			}
-			return alpha;
+			return (int)monteCarlo(state, NUM_CHARGES, timeout);
 		}
 
 		List<Move> myMoves = machine.getLegalMoves(state, myRole);
@@ -273,12 +269,7 @@ public class AliferousMonteCarlo extends StateMachineGamer {
 		}
 		if (searchTime(timeout)) {
 			doneSearching = false;
-			//int score = heuristicEval(state);
-			beta = Math.min(monteCarlo(state, NUM_CHARGES, timeout), beta);
-			if (beta <= alpha) {
-				return beta;
-			}
-			return alpha;
+			return (int)monteCarlo(state, NUM_CHARGES, timeout);
 
 		}
 
@@ -399,7 +390,7 @@ public class AliferousMonteCarlo extends StateMachineGamer {
 
 	@Override
 	public String getName() {
-		return "Aliferous-Experimental";
+		return "Aliferous-MonteCarlo";
 	}
 
 }
