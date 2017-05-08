@@ -15,6 +15,7 @@ public class Node {
 	private Boolean maxNode;
 	private Move move;
 	private int depth;
+	private Boolean isTerminal;
 
 	public Node(MachineState newState, Node parent, Move newMove, Boolean max) {
 		numVisits = 0;
@@ -36,7 +37,7 @@ public class Node {
 	}
 
 	public float getScore() {
-		return Math.max(score / numVisits , 99);
+		return Math.min(score / numVisits , 99);
 	}
 
 	public void addVisit() {
@@ -105,6 +106,10 @@ public class Node {
 
 			curr.printNode();
 			System.out.println("");
+
+			for (Node child : curr.getChildren()) {
+				toPrint.add(child);
+			}
 		}
 	}
 }

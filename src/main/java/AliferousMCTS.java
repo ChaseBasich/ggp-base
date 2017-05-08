@@ -252,7 +252,7 @@ public class AliferousMCTS extends StateMachineGamer {
 
 	private Node select(Node node, long timeout) throws MoveDefinitionException,
 														GoalDefinitionException, TransitionDefinitionException {
-		if (node.getNumVisits() == 0) {
+		if (node.getNumVisits() == 0 || node.getChildren().size() == 0) {
 			return node;
 		}
 
@@ -280,6 +280,10 @@ public class AliferousMCTS extends StateMachineGamer {
 
 		StateMachine machine = getStateMachine();
 		MachineState state = node.getState();
+
+		if (machine.isTerminal(state)) {
+			return;
+		}
 		//branch for max node vs min node
 		if (node.isMaxNode()) {
 			for (Move move : machine.getLegalMoves(node.getState(), getRole())) {
@@ -317,8 +321,8 @@ public class AliferousMCTS extends StateMachineGamer {
 	}
 
 	private void backpropagate(Node node, float score) {
-		node.addVisit();
 		node.setScore(node.getScore() * node.getNumVisits() + score);
+		node.addVisit();
 		if (node.getParent() != null){
 			backpropagate(node.getParent(), score);
 		}
@@ -534,6 +538,7 @@ public class AliferousMCTS extends StateMachineGamer {
 		int maxScore = 0;
 		long startTime = System.nanoTime();
 		long searchTime = (timeout - startTime - BUF_TIME) / 2;
+		currNode.printNode();
 		Node bestNode = currNode.getChildren().get(random.nextInt(currNode.getChildren().size()));
 		int max_depth = 1;
 		doneSearching = true;
@@ -562,6 +567,8 @@ public class AliferousMCTS extends StateMachineGamer {
 			doneSearching = true;
 		}
 
+		System.out.println("Node Score: " + bestNode.getScore());
+		System.out.println("Node visits: " + bestNode.getNumVisits());
 		return bestNode.getMove();
 	}
 
