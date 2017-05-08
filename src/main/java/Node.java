@@ -1,4 +1,6 @@
 import java.util.ArrayList;
+import java.util.LinkedList;
+import java.util.Queue;
 
 import org.ggp.base.util.statemachine.MachineState;
 import org.ggp.base.util.statemachine.Move;
@@ -12,6 +14,7 @@ public class Node {
 	private MachineState state;
 	private Boolean maxNode;
 	private Move move;
+	private int depth;
 
 	public Node(MachineState newState, Node parent, Move newMove, Boolean max) {
 		numVisits = 0;
@@ -21,6 +24,10 @@ public class Node {
 		parentNode = parent;
 		move = newMove;
 		maxNode = max; //if newMove is null, then this is a max node
+
+		if (parent != null) {
+			depth = parent.getDepth() + 1;
+		}
 	}
 
 	//get/set methods
@@ -29,7 +36,7 @@ public class Node {
 	}
 
 	public float getScore() {
-		return score / numVisits;
+		return Math.max(score / numVisits , 99);
 	}
 
 	public void addVisit() {
@@ -66,5 +73,38 @@ public class Node {
 
 	public Move getMove() {
 		return move;
+	}
+
+	public int getDepth() {
+		return depth;
+	}
+
+	public void setDepth(int newDepth) {
+		depth = newDepth;
+	}
+
+	public void printNode() {
+		System.out.println("Node: " + state.toString());
+		System.out.println("Move: " + move);
+		System.out.println("Score: " + score);
+		System.out.println("Depth: " + depth);
+		System.out.println("Visits: " + numVisits);
+		System.out.println("Children: " + childNodes.size());
+	}
+
+	public static void printTree(Node node) {
+		Queue<Node> toPrint = new LinkedList<Node>();
+		int depth = -1;
+		toPrint.add(node);
+		while(!toPrint.isEmpty()) {
+			Node curr = toPrint.poll();
+			if (curr.getDepth() != depth) {
+				depth = curr.getDepth();
+				System.out.println("\n\ndepth: " + depth);
+			}
+
+			curr.printNode();
+			System.out.println("");
+		}
 	}
 }
