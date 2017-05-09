@@ -29,6 +29,8 @@ public class Node {
 		if (parent != null) {
 			depth = parent.getDepth() + 1;
 		}
+
+		isTerminal = false;
 	}
 
 	//get/set methods
@@ -36,8 +38,16 @@ public class Node {
 		return numVisits;
 	}
 
+	public void addScore(float newScore) {
+		score = Math.min(100, (score * numVisits + newScore) / (numVisits + 1));
+		numVisits++;
+	}
+
 	public float getScore() {
-		return Math.min(score / numVisits , 99);
+		if (isTerminal) {
+			return score;
+		}
+		return Math.min(score, 99);
 	}
 
 	public void addVisit() {
@@ -84,6 +94,10 @@ public class Node {
 		depth = newDepth;
 	}
 
+	public void setTerminal() {
+		isTerminal = true;
+	}
+
 	public void printNode() {
 		System.out.println("Node: " + state.toString());
 		System.out.println("Move: " + move);
@@ -91,6 +105,7 @@ public class Node {
 		System.out.println("Depth: " + depth);
 		System.out.println("Visits: " + numVisits);
 		System.out.println("Children: " + childNodes.size());
+		System.out.println("Max?: " + maxNode);
 	}
 
 	public static void printTree(Node node) {
