@@ -590,6 +590,7 @@ public class AliferousMCTS extends StateMachineGamer {
 					}
 				}
 				if (!foundNode) {
+					System.out.println("failed to find node");
 					currNode = new Node(getCurrentState(), null, null, true);
 				}
 			}
@@ -604,6 +605,7 @@ public class AliferousMCTS extends StateMachineGamer {
 					}
 				}
 				if (!foundNode) {
+					System.out.println("failed to find node");
 					currNode = new Node(getCurrentState(), null, null, true);
 				}
 			}
