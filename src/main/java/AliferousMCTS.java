@@ -70,6 +70,7 @@ public class AliferousMCTS extends StateMachineGamer {
 		MachineState state = machine.getInitialState();
 		currNode = new Node(state, null, null, true);
 
+
 		if (machine.getRoles().size() == 1) {
 			singlePlayer = true;
 		}
@@ -644,21 +645,22 @@ public class AliferousMCTS extends StateMachineGamer {
 
 		Move result;
 
+		int totalCharges = 0;
 		if (moves.size() != 1) {
 			result = bestMonteCarloScore(timeout);
 		}
 		else {
 			result = moves.get(0);
 		}
-		int i = 0;
+		long remainingTime = (timeout - System.currentTimeMillis()) / 1000;
+		System.out.println(remainingTime);
 		while (timeout - System.currentTimeMillis() > BUF_TIME) {
-			i++;
 			monteCarlo(timeout);
+			totalCharges += 4;
 		}
-		System.out.println("Ran " + i + " montecarlos");
-
+		float averageCharges = totalCharges/remainingTime;
+		System.out.println(averageCharges);
 		findNode = true;
-
 		return result;
 
 	}
