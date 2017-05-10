@@ -299,7 +299,13 @@ public class AliferousMCTS extends StateMachineGamer {
 		if (node.isMaxNode()) {
 			for (Move move : machine.getLegalMoves(node.getState(), getRole())) {
 				Node childNode;
-				childNode = new Node(node.getState(), node, move, singlePlayer); //if singlePlayer, it stays max nodes
+				MachineState childState = node.getState();
+				if (singlePlayer) {
+					List<Move> moves = new ArrayList<Move>();
+					moves.add(move);
+					childState = machine.getNextState(node.getState(), moves);
+				}
+				childNode = new Node(childState, node, move, singlePlayer); //if singlePlayer, it stays max nodes
 				node.addChild(childNode);
 			}
 		}
@@ -546,7 +552,7 @@ public class AliferousMCTS extends StateMachineGamer {
 		Random random = new Random();
 
 
-		long startTime = System.nanoTime();
+		long startTime = System.currentTimeMillis();
 		long searchTime = (timeout - startTime - BUF_TIME) / 2;
 		Node bestNode = currNode.getChildren().get(random.nextInt(currNode.getChildren().size()));
 		int max_depth = 1;
