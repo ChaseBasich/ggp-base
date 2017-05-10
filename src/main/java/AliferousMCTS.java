@@ -22,30 +22,43 @@ import org.ggp.base.util.statemachine.implementation.prover.ProverStateMachine;
 
 public class AliferousMCTS extends StateMachineGamer {
 
+	//Constants - Adjust these to change how the AI structures its time
+
+	//Don't schedule any more new activities (monte carlo, etc) in the final MIN_TIME milliseconds
 	private static final long MIN_TIME = 3000;
-	private static final long SEARCH_TIME = 0;
+
+	//Stops whatever it's doing if time gets down to BUF_TIME milliseconds
 	private static final long BUF_TIME = 1500;
+
+	//Number of depth charges per state; we can make this dynamic
 	private static final int NUM_CHARGES = 4;
 
+	//Used for heuristics
 	private int maxScoreFound;
 	private int totalScores;
 
+	//Is it a single player game?
 	private Boolean singlePlayer;
 
+	//Keeps track of the node corresponding to the current state
 	private Node currNode;
+	//Whether or not currNode needs to be found. This should only be false if we just exited metagame
 	private Boolean findNode;
 
+	//Did we reach terminal states in our search? TODO: make this work for monte carlo, I don't think it does yet
 	private Boolean doneSearching;
+
+	//Has it been initialized yet? Some things have to be initialized during the first turn of the game
 	private Boolean init = false;
+
+	//Keeps track of moves and states seen so far, used for heuristics
 	private ArrayList< HashSet<Move> > totalMoves;
 	private HashSet<MachineState> totalStates;
 	private ArrayList<MachineState> terminalStates;
 	private HashSet<MachineState> terminalStatesSeen;
 	private MachineState savedState;
 
-	//monte carlo tree information
-	//private HashMap<MachineState, Node> stateMetaData;
-
+	/*During getInitialStateMachine() we initialize all the global data*/
 	@Override
 	public StateMachine getInitialStateMachine() {
 		totalMoves = new ArrayList< HashSet<Move> >();
@@ -63,6 +76,13 @@ public class AliferousMCTS extends StateMachineGamer {
 		return machine;
 	}
 
+	/*
+	 * (non-Javadoc)
+	 * @see org.ggp.base.player.gamer.statemachine.StateMachineGamer#stateMachineMetaGame(long)
+	 * Called at the beginning of the metagame. We can use this time to try to figure out information
+	 * about the game itself. Currently we determine whether or not it's a single player game and
+	 * start expanding the monte carlo tree
+	 */
 	@Override
 	public void stateMachineMetaGame(long timeout)
 			throws TransitionDefinitionException, MoveDefinitionException, GoalDefinitionException {
@@ -75,6 +95,7 @@ public class AliferousMCTS extends StateMachineGamer {
 			singlePlayer = true;
 		}
 
+		//Call montecarlo until we're out of search time
 		while(!searchTime(timeout)) {
 			monteCarlo(timeout);
 		}
@@ -82,10 +103,16 @@ public class AliferousMCTS extends StateMachineGamer {
 		//Node.printTree(currNode);
 	}
 
+	/*
+	 * Helper function to determine whether or not we should stop searching
+	 */
 	private Boolean searchTime (long timeout) {
 		return timeout - System.currentTimeMillis() <= MIN_TIME;
 	}
 
+	/*
+	 * Helper function to determine whether or not we need to return immediately
+	 */
 	private Boolean outOfTime(long timeout) {
 		return timeout - System.currentTimeMillis() <= BUF_TIME;
 	}
@@ -251,7 +278,7 @@ public class AliferousMCTS extends StateMachineGamer {
 	private float selectionScore(Node node, Node parentNode) {
 		float score = node.getScore();
 
-		score += Math.sqrt(2*Math.log(parentNode.getNumVisits())/node.getNumVisits());
+		score += Math.sqrt(1000*Math.log(parentNode.getNumVisits())/node.getNumVisits());
 		return score;
 	}
 
@@ -374,25 +401,35 @@ public class AliferousMCTS extends StateMachineGamer {
 	//montecarlo minimax
 	//--------------------------------------------------------------------------------------------
 
+	/*
+	 * Similar to the non-monte carlo minimax, used to search the tree. In this case it searches the tree of nodes
+	 * we are constructing. Because this represents our move we always take the maximum score of all the choices.
+	 * If it's a single player game it continues calling this recursively. If it's a multiplayer game it calls minScore
+	 * next to see which opponent move would minimize our score.
+	 */
 	private int monteCarloMaxScore(Node node, int alpha, int beta, int level, int max_level, long timeout) throws TransitionDefinitionException,
 						MoveDefinitionException, GoalDefinitionException{
 
 		StateMachine machine = getStateMachine();
 		Role myRole = getRole();
+
+		//Because we are searching the node tree, get the state associated with that node
 		MachineState state = node.getState();
 		if(machine.isTerminal(state)) {
 			return machine.getGoal(state, myRole);
 		}
-
+		//If we're completely out of time, just return immediately
 		if (outOfTime(timeout)) {
 			doneSearching = false;
 			return alpha;
 		}
+		//If we are at the end of our current search just return the score associated with this child
 		if (level > max_level || searchTime(timeout) || node.getChildren().size() == 0) {
 			doneSearching = false;
 			return (int) node.getScore();
 		}
 
+		//Continue searching through all the child nodes
 		for(Node childNode: node.getChildren()) {
 			if (singlePlayer) {
 				alpha = Math.max(monteCarloMaxScore(childNode, alpha, beta, level + 1, max_level, timeout), alpha);
@@ -406,6 +443,9 @@ public class AliferousMCTS extends StateMachineGamer {
 	}
 
 
+	/*
+	 * Similar to max score in that it continues searching the tree. Assumes the opponents always take the move that minimizes our player
+	 */
 	private int monteCarloMinScore(Node node, int alpha, int beta, int level, int max_level, long timeout) throws TransitionDefinitionException,
 			MoveDefinitionException, GoalDefinitionException{
 		StateMachine machine = getStateMachine();
@@ -505,8 +545,6 @@ public class AliferousMCTS extends StateMachineGamer {
 		return beta;
 	}
 
-
-	//only for 2-player games
 	private Move bestScore(long timeout) throws TransitionDefinitionException,
 									MoveDefinitionException, GoalDefinitionException{
 
@@ -546,21 +584,28 @@ public class AliferousMCTS extends StateMachineGamer {
 		return bestMove;
 	}
 
+
+	/*
+	 * Finds the best score to take at any given point by searching the monte carlo tree we have created so far, uses minimax
+	 */
 	private Move bestMonteCarloScore(long timeout) throws TransitionDefinitionException,
 												MoveDefinitionException, GoalDefinitionException{
 
 		Random random = new Random();
 
-
+		//Determines the amount of time available to search, which is half of totalTime - bufTime
 		long startTime = System.currentTimeMillis();
 		long searchTime = (timeout - startTime - BUF_TIME) / 2;
+		//Chose a random move in case we can't decide
 		Node bestNode = currNode.getChildren().get(random.nextInt(currNode.getChildren().size()));
 		int max_depth = 1;
 		doneSearching = true;
 
 		//todo: also, if it finds something before time runs out
+		//While there is time left to search
 		while (timeout - System.currentTimeMillis() > searchTime) {
 			int maxScore = 0;
+			//Find the maximum of all the children
 			for(Node childNode: currNode.getChildren()) {
 				int score;
 				if (singlePlayer) {
@@ -587,16 +632,18 @@ public class AliferousMCTS extends StateMachineGamer {
 		return bestNode.getMove();
 	}
 
-
+	//Finds the node associated with the current state, used at the start of each turn
 	private void getCurrentStateNode(long timeout) throws MoveDefinitionException,
 													GoalDefinitionException, TransitionDefinitionException {
 		StateMachine machine = getStateMachine();
+		//if there was no previous state, create one
 		if (currNode == null) {
 			System.out.println("No curr node");
 			currNode = new Node(getCurrentState(), null, null, true);
 		}
 		else {
 			Boolean foundNode = false;
+			//If it's single player then each state is the child of the previous state as there are no opponent moves
 			if (singlePlayer) {
 				for (Node childNode : currNode.getChildren()) {
 					if (childNode.getState().equals(getCurrentState())) {
@@ -610,6 +657,7 @@ public class AliferousMCTS extends StateMachineGamer {
 					currNode = new Node(getCurrentState(), null, null, true);
 				}
 			}
+			//In multiplayer games each state is the grandchild of the previous state due to opponent nodes in between
 			else {
 				for (Node childNode : currNode.getChildren()) {
 					for (Node grandChildNode : childNode.getChildren()) {
@@ -626,6 +674,7 @@ public class AliferousMCTS extends StateMachineGamer {
 				}
 			}
 		}
+		//To stop backpropagation at a reasonable point, set the parent to null
 		currNode.setParent(null);
 		monteCarlo(timeout);
 	}
@@ -652,20 +701,22 @@ public class AliferousMCTS extends StateMachineGamer {
 		Move result;
 
 		int totalCharges = 0;
+		//Only find the best move if there is more than 1 choice
 		if (moves.size() != 1) {
 			result = bestMonteCarloScore(timeout);
 		}
 		else {
 			result = moves.get(0);
 		}
-		long remainingTime = (timeout - System.currentTimeMillis()) / 1000;
-		System.out.println(remainingTime);
+		//For the remaining time, search the tree
+		long remainingTime = (timeout - System.currentTimeMillis() - BUF_TIME) / 1000;
+		System.out.println("Remaining time: " + remainingTime);
 		while (timeout - System.currentTimeMillis() > BUF_TIME) {
 			monteCarlo(timeout);
 			totalCharges += 4;
 		}
 		float averageCharges = totalCharges/remainingTime;
-		System.out.println(averageCharges);
+		System.out.println("Average charges per second: " + averageCharges);
 		findNode = true;
 		return result;
 
