@@ -332,7 +332,7 @@ public class AliferousMonteCarlo extends StateMachineGamer {
 			}
 			if (doneSearching) break;
 			max_depth++;
-			System.out.println("Moving to depth: " + Integer.toString(max_depth));
+			//System.out.println("Moving to depth: " + Integer.toString(max_depth));
 			doneSearching = true;
 		}
 

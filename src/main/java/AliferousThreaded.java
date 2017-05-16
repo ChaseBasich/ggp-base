@@ -20,7 +20,7 @@ import org.ggp.base.util.statemachine.exceptions.TransitionDefinitionException;
 import org.ggp.base.util.statemachine.implementation.prover.ProverStateMachine;
 
 
-public class AliferousMCTS extends StateMachineGamer {
+public class AliferousThreaded extends StateMachineGamer {
 
 	//Constants - Adjust these to change how the AI structures its time
 
@@ -31,7 +31,7 @@ public class AliferousMCTS extends StateMachineGamer {
 	private static final long BUF_TIME = 1500;
 
 	//Number of depth charges per state; we can make this dynamic
-	private static final int NUM_CHARGES = 6;
+	private static final int NUM_CHARGES = 8;
 
 	//Used for heuristics
 	private int maxScoreFound;
@@ -378,8 +378,34 @@ public class AliferousMCTS extends StateMachineGamer {
 
 	private float simulate(Node node, long timeout) throws GoalDefinitionException, MoveDefinitionException, TransitionDefinitionException {
 		float total = 0;
+		final float[] results = new float[NUM_CHARGES];
+		final Node currNode = node;
+		final long time = timeout;
+		ArrayList<Thread> threads = new ArrayList<Thread>();
 		for (int i = 0; i < NUM_CHARGES; i++) {
-			total += depthCharge(node.getState(), timeout);
+			final int index = i;
+			threads.add(new Thread() {
+				int x = index;
+				@Override
+				public void run() {
+					try {
+						results[x] = depthCharge(currNode.getState(), time);
+					} catch (GoalDefinitionException | MoveDefinitionException | TransitionDefinitionException e) {
+						e.printStackTrace();
+					}
+				}
+
+			});
+			threads.get(i).start();
+		}
+
+		for (int i = 0; i < NUM_CHARGES; i++) {
+			try {
+				threads.get(i).join();
+				total += results[i];
+			} catch (InterruptedException e) {
+				e.printStackTrace();
+			}
 		}
 		return total / NUM_CHARGES;
 	}
@@ -743,7 +769,7 @@ public class AliferousMCTS extends StateMachineGamer {
 		long timeTaken = System.currentTimeMillis() - startTime;
 		float averageCharges = totalCharges/(timeTaken/1000);
 		System.out.println("\nTime taken in milliseconds: " + timeTaken);
-		System.out.println("Average charges per second: " + averageCharges);
+		System.out.println("Average multi charges per second: " + averageCharges);
 		findNode = true;
 
 		//Only find the best move if there is more than 1 choice
@@ -798,7 +824,7 @@ public class AliferousMCTS extends StateMachineGamer {
 
 	@Override
 	public String getName() {
-		return "Aliferous-MCTS";
+		return "Aliferous-Threaded";
 	}
 
 
