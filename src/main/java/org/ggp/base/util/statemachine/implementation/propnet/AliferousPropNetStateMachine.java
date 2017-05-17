@@ -1,11 +1,13 @@
 package org.ggp.base.util.statemachine.implementation.propnet;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.Stack;
 
 import org.ggp.base.util.gdl.grammar.Gdl;
 import org.ggp.base.util.gdl.grammar.GdlConstant;
@@ -13,7 +15,11 @@ import org.ggp.base.util.gdl.grammar.GdlRelation;
 import org.ggp.base.util.gdl.grammar.GdlSentence;
 import org.ggp.base.util.propnet.architecture.Component;
 import org.ggp.base.util.propnet.architecture.PropNet;
+import org.ggp.base.util.propnet.architecture.components.And;
+import org.ggp.base.util.propnet.architecture.components.Not;
+import org.ggp.base.util.propnet.architecture.components.Or;
 import org.ggp.base.util.propnet.architecture.components.Proposition;
+import org.ggp.base.util.propnet.architecture.components.Transition;
 import org.ggp.base.util.propnet.factory.OptimizingPropNetFactory;
 import org.ggp.base.util.statemachine.MachineState;
 import org.ggp.base.util.statemachine.Move;
@@ -27,71 +33,119 @@ import org.ggp.base.util.statemachine.implementation.prover.query.ProverQueryBui
 
 
 public class AliferousPropNetStateMachine extends StateMachine {
-    /** The underlying proposition network  */
-    private PropNet propNet;
-    /** The topological ordering of the propositions */
-    private List<Proposition> ordering;
-    /** The player roles */
-    private List<Role> roles;
+	/** The underlying proposition network  */
+	private PropNet propNet;
+	/** The topological ordering of the propositions */
+	private List<Proposition> ordering;
+	/** The player roles */
+	private List<Role> roles;
 
-    //private methods
-    //mark the bases of the propnet
-    private void markBases(MachineState state) {
-    	clearPropNet();
-    	Map<GdlSentence, Proposition> map = propNet.getBasePropositions();
-    	Set<GdlSentence> sentences = state.getContents();
-    	for (GdlSentence sentence : sentences) {
-    		Proposition p = map.get(sentence);
-    		p.setValue(true);
-    	}
-    }
+	//private methods
+	//mark the bases of the propnet
+	private void markBases(MachineState state) {
+		clearPropNet();
+		Map<GdlSentence, Proposition> map = propNet.getBasePropositions();
+		Set<GdlSentence> sentences = state.getContents();
+		for (GdlSentence sentence : sentences) {
+			Proposition p = map.get(sentence);
+			p.setValue(true);
+		}
+	}
 
-    private void markActions(List<Move> moves) {
-    	Map<GdlSentence, Proposition> map = propNet.getInputPropositions();
-    	for (Proposition p : map.values()) {
-    		p.setValue(false);
-    	}
-    	List<GdlSentence> does = toDoes(moves);
-    	for (GdlSentence sentence : does) {
-    		Proposition p = map.get(sentence);
-    		p.setValue(true);
-    	}
-    }
+	private void markActions(List<Move> moves) {
+		Map<GdlSentence, Proposition> map = propNet.getInputPropositions();
+		for (Proposition p : map.values()) {
+			p.setValue(false);
+		}
+		List<GdlSentence> does = toDoes(moves);
+		for (GdlSentence sentence : does) {
+			Proposition p = map.get(sentence);
+			p.setValue(true);
+		}
+	}
 
-    private void clearPropNet() {
-    	Map<GdlSentence, Proposition> map = propNet.getBasePropositions();
-    	for (Proposition p : map.values()) {
-    		p.setValue(false);
-    	}
-    }
+	private void clearPropNet() {
+		Map<GdlSentence, Proposition> map = propNet.getBasePropositions();
+		for (Proposition p : map.values()) {
+			p.setValue(false);
+		}
+	}
 
-    //Methods to find the value of the proposition
-    private Boolean getPropMark(Component c) {
-    	if (c instanceof Proposition) {
-    		Proposition p = (Proposition) c;
-    		if (propNet.getInputPropositions().containsKey(p) || propNet.getBasePropositions().containsKey(p)) {
-    			return p.getValue();
-    		}
-    		return getPropMark(p.getSingleInput());
-    	}
-    	return c.getValue();
-    }
+	private Boolean propMarkNegation(Component c){
+		return !getPropMark(c.getSingleInput());
+	}
 
-    /**
-     * Initializes the PropNetStateMachine. You should compute the topological
-     * ordering here. Additionally you may compute the initial state here, at
-     * your discretion.
-     */
-    @Override
-    public void initialize(List<Gdl> description) {
-        try {
+	private Boolean propMarkConjunction(Component c){
+		for ( Component component : c.getInputs() )
+		{
+			if (!getPropMark(component))
+			{
+				return false;
+			}
+		}
+		return true;
+	}
+
+	private Boolean propMarkDisjunction(Component c){
+		for ( Component component : c.getInputs() )
+		{
+			if ( getPropMark(component) )
+			{
+				return true;
+			}
+		}
+		return false;
+	}
+
+	private Boolean isViewProp(Proposition p){
+		return !(propNet.getInputPropositions().containsValue(p) ||
+				propNet.getBasePropositions().containsValue(p));
+	}
+
+	//Methods to find the value of the proposition
+	private Boolean getPropMark(Component c) {
+		if (c instanceof Proposition) {
+			Proposition p = (Proposition) c;
+			if (!isViewProp(p)) {
+				return p.getValue();
+			}
+			return getPropMark(p.getSingleInput());
+		}
+
+		if (c instanceof Not){
+			return propMarkNegation(c);
+		}
+
+		if (c instanceof And){
+			return propMarkConjunction(c);
+		}
+
+		if (c instanceof Or){
+			return propMarkDisjunction(c);
+		}
+
+		if (c instanceof Transition){
+			return getPropMark(c.getSingleInput());
+		}
+
+		return false;
+	}
+
+	/**
+	 * Initializes the PropNetStateMachine. You should compute the topological
+	 * ordering here. Additionally you may compute the initial state here, at
+	 * your discretion.
+	 */
+	@Override
+	public void initialize(List<Gdl> description) {
+		try {
 			propNet = OptimizingPropNetFactory.create(description);
-	        roles = propNet.getRoles();
-	        ordering = getOrdering();
+			roles = propNet.getRoles();
+			ordering = getOrdering();
 		} catch (InterruptedException e) {
 			throw new RuntimeException(e);
 		}
-    }
+	}
 
 	/**
 	 * Computes if the state is terminal. Should return the value
@@ -112,7 +166,7 @@ public class AliferousPropNetStateMachine extends StateMachine {
 	 */
 	@Override
 	public int getGoal(MachineState state, Role role)
-	throws GoalDefinitionException {
+			throws GoalDefinitionException {
 		markBases(state);
 		Set<Proposition> goals = propNet.getGoalPropositions().get(role);
 		int count = 0;
@@ -151,7 +205,7 @@ public class AliferousPropNetStateMachine extends StateMachine {
 	 */
 	@Override
 	public List<Move> getLegalMoves(MachineState state, Role role)
-	throws MoveDefinitionException {
+			throws MoveDefinitionException {
 		markBases(state);
 		Set<Proposition> legals = propNet.getLegalPropositions().get(role);
 		List<Move> moves = new ArrayList<Move>();
@@ -168,7 +222,7 @@ public class AliferousPropNetStateMachine extends StateMachine {
 	 */
 	@Override
 	public MachineState getNextState(MachineState state, List<Move> moves)
-	throws TransitionDefinitionException {
+			throws TransitionDefinitionException {
 		markActions(moves);
 		markBases(state);
 		return getStateFromBase();
@@ -190,8 +244,8 @@ public class AliferousPropNetStateMachine extends StateMachine {
 	 */
 	public List<Proposition> getOrdering()
 	{
-	    // List to contain the topological ordering.
-	    List<Proposition> order = new LinkedList<Proposition>();
+		// List to contain the topological ordering.
+		List<Proposition> order = new LinkedList<Proposition>();
 
 		// All of the components in the PropNet
 		List<Component> components = new ArrayList<Component>(propNet.getComponents());
@@ -199,10 +253,55 @@ public class AliferousPropNetStateMachine extends StateMachine {
 		// All of the propositions in the PropNet.
 		List<Proposition> propositions = new ArrayList<Proposition>(propNet.getPropositions());
 
-	   //TODO: forward prop
+		Stack<Component> stack = new Stack<Component>();
 
+		// Mark all the vertices as not visited
+		Map<Component, Boolean> visited = new HashMap<Component, Boolean>();
+		for (Component c : components){
+			visited.put(c, false);
+		}
+
+		// Call the recursive helper function to store
+		// Topological Sort starting from all vertices
+		// one by one
+		for (Component c : components){
+			if(!visited.get(c)){
+				topologicalSortUtil(c, visited, stack);
+			}
+		}
+		// Print contents of stack
+		while (!stack.empty()){
+			Component c = stack.pop();
+			if(propositions.contains(c)){
+				Proposition q = (Proposition) c;
+				if(isViewProp(q)){
+					order.add(q);
+				}
+			}
+		}
 		return order;
 	}
+
+	void topologicalSortUtil(Component c, Map<Component,Boolean> visited, Stack<Component> stack)
+	{
+		// Mark the current node as visited.
+		visited.put(c, true);
+
+		// Recur for all the vertices adjacent to this
+		// vertex
+
+		for (Component output : c.getOutputs())
+		{
+			if (!visited.get(output))
+				topologicalSortUtil(output, visited, stack);
+		}
+
+		// Push current vertex to stack which stores result
+		stack.push(c);
+	}
+
+
+
 
 	/* Already implemented for you */
 	@Override
@@ -251,7 +350,7 @@ public class AliferousPropNetStateMachine extends StateMachine {
 	 * @param goalProposition
 	 * @return the integer value of the goal proposition
 	 */
-    private int getGoalValue(Proposition goalProposition)
+	private int getGoalValue(Proposition goalProposition)
 	{
 		GdlRelation relation = (GdlRelation) goalProposition.getName();
 		GdlConstant constant = (GdlConstant) relation.get(1);
@@ -269,7 +368,7 @@ public class AliferousPropNetStateMachine extends StateMachine {
 		Set<GdlSentence> contents = new HashSet<GdlSentence>();
 		for (Proposition p : propNet.getBasePropositions().values())
 		{
-			p.setValue(p.getSingleInput().getValue());
+			p.setValue(getPropMark(p.getSingleInput()));
 			if (p.getValue())
 			{
 				contents.add(p.getName());
