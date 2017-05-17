@@ -157,14 +157,7 @@ public class AliferousPropNetStateMachine extends StateMachine {
 	throws TransitionDefinitionException {
 		markActions(moves);
 		markBases(state);
-		MachineState newState = new MachineState();
-		Set<GdlSentence> sentences = newState.getContents();
-		for (Proposition prop : propNet.getBasePropositions().values()) {
-			if (getPropMark(prop.getSingleInput())) {
-				sentences.add(prop.getName());
-			}
-		}
-		return newState;
+		return getStateFromBase();
 	}
 
 	/**
