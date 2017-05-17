@@ -17,6 +17,11 @@ public class Node {
 	private int depth;
 	private Boolean isTerminal;
 
+	//For use in propagating deterministic information up. Only set if terminal or if all children are terminal
+	private float min;
+	private float max;
+	private boolean seenTerminal;
+
 	public Node(MachineState newState, Node parent, Move newMove, Boolean max) {
 		numVisits = 0;
 		score = 0;
@@ -44,7 +49,7 @@ public class Node {
 	}
 
 	public float getScore() {
-		if (isTerminal) {
+		if (isTerminal || seenTerminal) {
 			return score;
 		}
 		return Math.min(score, 99);
@@ -96,6 +101,32 @@ public class Node {
 
 	public void setTerminal() {
 		isTerminal = true;
+	}
+
+	public Boolean isTerminal() {
+		return isTerminal;
+	}
+
+	public void setMin(float newMin) {
+		min = newMin;
+		seenTerminal = true;
+	}
+
+	public float getMin() {
+		return min;
+	}
+
+	public void setMax(float newMax) {
+		max = newMax;
+		seenTerminal = true;
+	}
+
+	public float getMax() {
+		return max;
+	}
+
+	public Boolean canSeeTerminal() {
+		return seenTerminal;
 	}
 
 	public void printNode() {
