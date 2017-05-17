@@ -113,9 +113,12 @@ public class AliferousPropNetStateMachine extends StateMachine {
 	@Override
 	public int getGoal(MachineState state, Role role)
 	throws GoalDefinitionException {
+		markBases(state);
 		Set<Proposition> goals = propNet.getGoalPropositions().get(role);
-		if (goals.size() == 1) {
-			return getGoalValue(goals.iterator().next());
+		for(Proposition prop : goals){
+			if(getPropMark(prop)){
+				return getGoalValue(prop);
+			}
 		}
 		throw new GoalDefinitionException(state, role);
 	}
