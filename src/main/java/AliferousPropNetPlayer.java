@@ -377,8 +377,34 @@ public class AliferousPropNetPlayer extends StateMachineGamer {
 
 	private float simulate(Node node, long timeout) throws GoalDefinitionException, MoveDefinitionException, TransitionDefinitionException {
 		float total = 0;
+		final float[] results = new float[NUM_CHARGES];
+		final Node currNode = node;
+		final long time = timeout;
+		ArrayList<Thread> threads = new ArrayList<Thread>();
 		for (int i = 0; i < NUM_CHARGES; i++) {
-			total += depthCharge(node.getState(), timeout);
+			final int index = i;
+			threads.add(new Thread() {
+				int x = index;
+				@Override
+				public void run() {
+					try {
+						results[x] = depthCharge(currNode.getState(), time);
+					} catch (GoalDefinitionException | MoveDefinitionException | TransitionDefinitionException e) {
+						e.printStackTrace();
+					}
+				}
+
+			});
+			threads.get(i).start();
+		}
+
+		for (int i = 0; i < NUM_CHARGES; i++) {
+			try {
+				threads.get(i).join();
+				total += results[i];
+			} catch (InterruptedException e) {
+				e.printStackTrace();
+			}
 		}
 		return total / NUM_CHARGES;
 	}
@@ -744,7 +770,7 @@ public class AliferousPropNetPlayer extends StateMachineGamer {
 		long timeTaken = System.currentTimeMillis() - startTime;
 		float averageCharges = totalCharges/(timeTaken/1000);
 		System.out.println("\nTime taken in milliseconds: " + timeTaken);
-		System.out.println("Average prop charges per second: " + averageCharges);
+		System.out.println("Average prop-threaded charges per second: " + averageCharges);
 		findNode = true;
 
 		//Only find the best move if there is more than 1 choice
