@@ -377,34 +377,8 @@ public class AliferousPropNetPlayer extends StateMachineGamer {
 
 	private float simulate(Node node, long timeout) throws GoalDefinitionException, MoveDefinitionException, TransitionDefinitionException {
 		float total = 0;
-		final float[] results = new float[NUM_CHARGES];
-		final Node currNode = node;
-		final long time = timeout;
-		ArrayList<Thread> threads = new ArrayList<Thread>();
 		for (int i = 0; i < NUM_CHARGES; i++) {
-			final int index = i;
-			threads.add(new Thread() {
-				int x = index;
-				@Override
-				public void run() {
-					try {
-						results[x] = depthCharge(currNode.getState(), time);
-					} catch (GoalDefinitionException | MoveDefinitionException | TransitionDefinitionException e) {
-						e.printStackTrace();
-					}
-				}
-
-			});
-			threads.get(i).start();
-		}
-
-		for (int i = 0; i < NUM_CHARGES; i++) {
-			try {
-				threads.get(i).join();
-				total += results[i];
-			} catch (InterruptedException e) {
-				e.printStackTrace();
-			}
+			total += depthCharge(node.getState(), timeout);
 		}
 		return total / NUM_CHARGES;
 	}
@@ -658,6 +632,7 @@ public class AliferousPropNetPlayer extends StateMachineGamer {
 		//todo: also, if it finds something before time runs out
 		//While there is time left to search
 		int maxScore = 0;
+		System.out.println("Searching with " + (timeout - System.currentTimeMillis()) + " milli left");
 		while (timeout - System.currentTimeMillis() > BUF_TIME) {
 			//Find the maximum of all the children
 			for(Node childNode: currNode.getChildren()) {
@@ -669,6 +644,7 @@ public class AliferousPropNetPlayer extends StateMachineGamer {
 					score = monteCarloMinScore(childNode, 0, 100, 0, max_depth, timeout);
 				}
 				if (score == 100) {
+					System.out.println("returning 100");
 					return childNode.getMove();
 				}
 				if (score > maxScore) {

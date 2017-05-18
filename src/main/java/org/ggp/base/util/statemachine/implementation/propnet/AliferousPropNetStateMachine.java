@@ -69,6 +69,11 @@ public class AliferousPropNetStateMachine extends StateMachine {
 		for (Proposition p : map.values()) {
 			p.setValue(false);
 		}
+		map = propNet.getInputPropositions();
+		for (Proposition p : map.values()) {
+			p.setValue(false);
+		}
+		propNet.getInitProposition().setValue(false);
 	}
 
 	private Boolean propMarkNegation(Component c){
@@ -99,7 +104,7 @@ public class AliferousPropNetStateMachine extends StateMachine {
 
 	private Boolean isViewProp(Proposition p){
 		return !(propNet.getInputPropositions().containsValue(p) ||
-				propNet.getBasePropositions().containsValue(p));
+				propNet.getBasePropositions().containsValue(p) || propNet.getInitProposition().equals(p));
 	}
 
 	//Methods to find the value of the proposition
@@ -128,7 +133,7 @@ public class AliferousPropNetStateMachine extends StateMachine {
 			return getPropMark(c.getSingleInput());
 		}
 
-		return false;
+		return c.getValue();
 	}
 
 	/**
@@ -154,7 +159,8 @@ public class AliferousPropNetStateMachine extends StateMachine {
 	@Override
 	public boolean isTerminal(MachineState state) {
 		markBases(state);
-		return getPropMark(propNet.getTerminalProposition());
+		Boolean result = getPropMark(propNet.getTerminalProposition());
+		return result;
 	}
 
 	/**
@@ -223,9 +229,25 @@ public class AliferousPropNetStateMachine extends StateMachine {
 	@Override
 	public MachineState getNextState(MachineState state, List<Move> moves)
 			throws TransitionDefinitionException {
-		markActions(moves);
 		markBases(state);
-		return getStateFromBase();
+		markActions(moves);
+		Map<Proposition, Boolean> props = new HashMap<Proposition, Boolean>();
+		for (Proposition p : propNet.getBasePropositions().values()) {
+			props.put(p, getPropMark(p.getSingleInput().getSingleInput()));
+		}
+		for (Proposition p : propNet.getBasePropositions().values()) {
+			p.setValue(props.get(p));
+		}
+		Set<GdlSentence> contents = new HashSet<GdlSentence>();
+		for (Proposition p : propNet.getBasePropositions().values())
+		{
+			if (p.getValue())
+			{
+				contents.add(p.getName());
+			}
+
+		}
+		return new MachineState(contents);
 	}
 
 	/**
@@ -368,7 +390,7 @@ public class AliferousPropNetStateMachine extends StateMachine {
 		Set<GdlSentence> contents = new HashSet<GdlSentence>();
 		for (Proposition p : propNet.getBasePropositions().values())
 		{
-			p.setValue(getPropMark(p.getSingleInput()));
+			p.setValue(p.getSingleInput().getValue());
 			if (p.getValue())
 			{
 				contents.add(p.getName());
