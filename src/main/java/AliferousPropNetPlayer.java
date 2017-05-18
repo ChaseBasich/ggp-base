@@ -763,7 +763,7 @@ public class AliferousPropNetPlayer extends StateMachineGamer {
 		//start by doing MCTS on our current node
 		long startTime = System.currentTimeMillis();
 		long searchTime = (timeout - startTime - MIN_TIME) / 2;
-		while (timeout - System.currentTimeMillis() > searchTime) {
+		while (System.currentTimeMillis() < startTime + searchTime) {
 			monteCarlo(timeout);
 			totalCharges += 4;
 		}
