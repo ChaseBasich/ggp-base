@@ -98,8 +98,7 @@ public class AliferousPropNetStateMachine extends StateMachine {
 	}
 
 	private Boolean isViewProp(Proposition p){
-		return !(propNet.getInputPropositions().containsValue(p) ||
-				propNet.getBasePropositions().containsValue(p) || propNet.getInitProposition().equals(p));
+		return p.getType() == Proposition.PropType.VIEW;
 	}
 
 	//Methods to find the value of the proposition
@@ -132,6 +131,30 @@ public class AliferousPropNetStateMachine extends StateMachine {
 	}
 
 	/**
+	 *
+	 * Used to set the types of all the propositions in the propNet
+	 * Types are either VIEW, INPUT, BASE, OTHER
+	 */
+	private void setTypes() {
+		Map<GdlSentence, Proposition> baseProps = propNet.getBasePropositions();
+		Map<GdlSentence, Proposition> inputProps = propNet.getInputPropositions();
+		for (Proposition p : propNet.getPropositions()) {
+			if (inputProps.containsValue(p)) {
+				p.setType(Proposition.PropType.INPUT);
+			}
+			else if (baseProps.containsValue(p)) {
+				p.setType(Proposition.PropType.BASE);
+			}
+			else if (propNet.getInitProposition().equals(p)) {
+				p.setType(Proposition.PropType.OTHER);
+			}
+			else {
+				p.setType(Proposition.PropType.VIEW);
+			}
+		}
+	}
+
+	/**
 	 * Initializes the PropNetStateMachine. You should compute the topological
 	 * ordering here. Additionally you may compute the initial state here, at
 	 * your discretion.
@@ -142,6 +165,7 @@ public class AliferousPropNetStateMachine extends StateMachine {
 			propNet = OptimizingPropNetFactory.create(description);
 			roles = propNet.getRoles();
 			ordering = getOrdering();
+			setTypes();
 		} catch (InterruptedException e) {
 			throw new RuntimeException(e);
 		}

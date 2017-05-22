@@ -24,10 +24,10 @@ public class AliferousPropNetPlayer extends StateMachineGamer {
 	//Constants - Adjust these to change how the AI structures its time
 
 	//Don't schedule any more new activities (monte carlo, etc) in the final MIN_TIME milliseconds
-	private static final long MIN_TIME = 3000;
+	private static final long MIN_TIME = 3500;
 
 	//Stops whatever it's doing if time gets down to BUF_TIME milliseconds
-	private static final long BUF_TIME = 1500;
+	private static final long BUF_TIME = 2500;
 
 	//Number of depth charges per state; we can make this dynamic
 	private static final int NUM_CHARGES = 8;
@@ -50,6 +50,9 @@ public class AliferousPropNetPlayer extends StateMachineGamer {
 	//Has it been initialized yet? Some things have to be initialized during the first turn of the game
 	private Boolean init = false;
 
+	//To avoid re-initializing this each time we make it a private variable. TODO: check thread safety
+	private Random random;
+
 	//Keeps track of moves and states seen so far, used for heuristics
 	private ArrayList< HashSet<Move> > totalMoves;
 	private HashSet<MachineState> totalStates;
@@ -66,6 +69,7 @@ public class AliferousPropNetPlayer extends StateMachineGamer {
 		terminalStatesSeen = new HashSet<MachineState>();
 
 
+		random = new Random();
 		savedState = null;
 		findNode = true;
 		maxScoreFound = 0;
@@ -127,8 +131,6 @@ public class AliferousPropNetPlayer extends StateMachineGamer {
 		if (savedState != null) {
 			useState = savedState;
 		}
-
-		Random random = new Random();
 
 		while (!machine.isTerminal(useState)) {
 			if(System.currentTimeMillis() - startTime > searchTime) {
@@ -283,8 +285,6 @@ public class AliferousPropNetPlayer extends StateMachineGamer {
 
 	private Node select(Node node, long timeout) throws MoveDefinitionException,
 														GoalDefinitionException, TransitionDefinitionException {
-
-		Random random = new Random();
 		if (node.getNumVisits() == 0 || node.getChildren().size() == 0) {
 			return node;
 		}
@@ -610,8 +610,6 @@ public class AliferousPropNetPlayer extends StateMachineGamer {
 
 		List<Move> myMoves = machine.getLegalMoves(state, myRole);
 
-		Random random = new Random();
-
 		int maxScore = 0;
 		long startTime = System.nanoTime();
 		Move bestMove = myMoves.get(random.nextInt(myMoves.size()));
@@ -646,8 +644,6 @@ public class AliferousPropNetPlayer extends StateMachineGamer {
 	 */
 	private Move bestMonteCarloScore(long timeout) throws TransitionDefinitionException,
 												MoveDefinitionException, GoalDefinitionException{
-
-		Random random = new Random();
 
 		//Determines the amount of time available to search, which is half of totalTime - bufTime
 		//Chose a random move in case we can't decide
