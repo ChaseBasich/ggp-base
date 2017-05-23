@@ -52,7 +52,7 @@ public class Node {
 		if (isTerminal || seenTerminal) {
 			return score;
 		}
-		return Math.min(score, 99);
+		return Math.max(Math.min(score, 99), 1);
 	}
 
 	public void addVisit() {

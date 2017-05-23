@@ -658,6 +658,7 @@ public class AliferousPropNetPlayer extends StateMachineGamer {
 		//todo: also, if it finds something before time runs out
 		//While there is time left to search
 		int maxScore = 0;
+		System.out.println("Searching with " + (timeout - System.currentTimeMillis()) + " milli left");
 		while (timeout - System.currentTimeMillis() > BUF_TIME) {
 			//Find the maximum of all the children
 			for(Node childNode: currNode.getChildren()) {
@@ -669,6 +670,7 @@ public class AliferousPropNetPlayer extends StateMachineGamer {
 					score = monteCarloMinScore(childNode, 0, 100, 0, max_depth, timeout);
 				}
 				if (score == 100) {
+					System.out.println("returning 100");
 					return childNode.getMove();
 				}
 				if (score > maxScore) {
@@ -761,14 +763,14 @@ public class AliferousPropNetPlayer extends StateMachineGamer {
 		//start by doing MCTS on our current node
 		long startTime = System.currentTimeMillis();
 		long searchTime = (timeout - startTime - MIN_TIME) / 2;
-		while (timeout - System.currentTimeMillis() > searchTime) {
+		while (System.currentTimeMillis() < startTime + searchTime) {
 			monteCarlo(timeout);
 			totalCharges += 4;
 		}
 		long timeTaken = System.currentTimeMillis() - startTime;
 		float averageCharges = totalCharges/(timeTaken/1000);
 		System.out.println("\nTime taken in milliseconds: " + timeTaken);
-		System.out.println("Average prop charges per second: " + averageCharges);
+		System.out.println("Average prop-threaded charges per second: " + averageCharges);
 		findNode = true;
 
 		//Only find the best move if there is more than 1 choice
