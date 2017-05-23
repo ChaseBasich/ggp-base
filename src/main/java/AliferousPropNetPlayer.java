@@ -100,11 +100,12 @@ public class AliferousPropNetPlayer extends StateMachineGamer {
 			singlePlayer = true;
 		}
 
-		long depthChargeTime = System.currentTimeMillis();
-		depthCharge(currNode.getState(), timeout);
-		depthChargeTime = System.currentTimeMillis() - depthChargeTime;
+		long startTime = System.currentTimeMillis();
+		machine.getNextState(state, machine.getRandomJointMove(state));
+		long totalTime = System.currentTimeMillis() - startTime;
 
-		if(depthChargeTime > 100) {
+
+		if(totalTime > 100) {
 			useHeuristics = true;
 		}
 		else {
@@ -303,8 +304,6 @@ public class AliferousPropNetPlayer extends StateMachineGamer {
 		StateMachine machine = getStateMachine();
 
 		List< List<Move> > jointMoves = machine.getLegalJointMoves(state, getRole(), myMove);
-
-		Map<Role, Integer> indices = machine.getRoleIndices();
 
 		if (outOfTime(timeout)) {
 			doneSearching = false;
@@ -850,6 +849,16 @@ public class AliferousPropNetPlayer extends StateMachineGamer {
 	public Move stateMachineSelectMove(long  timeout)
 			throws TransitionDefinitionException, MoveDefinitionException, GoalDefinitionException {
 
+		StateMachine machine = getStateMachine();
+
+		if (!init) {
+
+			for (int i = 0; i < machine.getRoles().size(); i++) {
+				totalMoves.add(new HashSet<Move> ());
+			}
+			init = true;
+		}
+
 		if(useHeuristics) {
 			return bestHeuristicScore(timeout);
 		}
@@ -859,15 +868,6 @@ public class AliferousPropNetPlayer extends StateMachineGamer {
 		}
 		System.out.println("\nCurrentNode:");
 		currNode.printNode();
-		StateMachine machine = getStateMachine();
-		if (!init) {
-
-			for (int i = 0; i < machine.getRoles().size(); i++) {
-				totalMoves.add(new HashSet<Move> ());
-			}
-			init = true;
-		}
-
 		List<Move> moves = machine.getLegalMoves(getCurrentState(), getRole());
 
 		Move result;

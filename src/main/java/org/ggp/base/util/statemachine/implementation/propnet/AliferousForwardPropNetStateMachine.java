@@ -298,7 +298,6 @@ public class AliferousForwardPropNetStateMachine extends StateMachine {
 		markActions(moves, props);
 		forwardProp(props);
 		return getStateFromBase(props);
-
 	}
 
 	/**
