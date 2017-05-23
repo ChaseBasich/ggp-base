@@ -16,6 +16,7 @@ import org.ggp.base.util.gdl.grammar.GdlSentence;
 import org.ggp.base.util.propnet.architecture.Component;
 import org.ggp.base.util.propnet.architecture.PropNet;
 import org.ggp.base.util.propnet.architecture.components.And;
+import org.ggp.base.util.propnet.architecture.components.Constant;
 import org.ggp.base.util.propnet.architecture.components.Not;
 import org.ggp.base.util.propnet.architecture.components.Or;
 import org.ggp.base.util.propnet.architecture.components.Proposition;
@@ -32,17 +33,17 @@ import org.ggp.base.util.statemachine.implementation.prover.query.ProverQueryBui
 
 
 
-public class AliferousPropNetStateMachine extends StateMachine {
+public class AliferousForwardPropNetStateMachine extends StateMachine {
 	/** The underlying proposition network  */
 	private PropNet propNet;
 	/** The topological ordering of the propositions */
-	private List<Proposition> ordering;
+	private List<Component> ordering;
 	/** The player roles */
 	private List<Role> roles;
 
 	//private methods
 	//mark the bases of the propnet
-	private void markBases(MachineState state, Set<Proposition> bases) {
+	private void markBases(MachineState state, Set<Component> bases) {
 		Map<GdlSentence, Proposition> map = propNet.getBasePropositions();
 		Set<GdlSentence> sentences = state.getContents();
 		for (GdlSentence sentence : sentences) {
@@ -51,7 +52,7 @@ public class AliferousPropNetStateMachine extends StateMachine {
 		}
 	}
 
-	private void markActions(List<Move> moves, Set<Proposition> inputs) {
+	private void markActions(List<Move> moves, Set<Component> inputs) {
 		Map<GdlSentence, Proposition> map = propNet.getInputPropositions();
 		List<GdlSentence> does = toDoes(moves);
 		for (GdlSentence sentence : does) {
@@ -71,14 +72,14 @@ public class AliferousPropNetStateMachine extends StateMachine {
 		propNet.getInitProposition().setValue(false);
 	}
 
-	private Boolean propMarkNegation(Component c, Set<Proposition> props){
-		return !getPropMark(c.getSingleInput(), props);
+	private Boolean propMarkNegation(Component c, Set<Component> props){
+		return !props.contains(c.getSingleInput());
 	}
 
-	private Boolean propMarkConjunction(Component c, Set<Proposition> props){
+	private Boolean propMarkConjunction(Component c, Set<Component> props){
 		for ( Component component : c.getInputs() )
 		{
-			if (!getPropMark(component, props))
+			if (!props.contains(component))
 			{
 				return false;
 			}
@@ -86,10 +87,10 @@ public class AliferousPropNetStateMachine extends StateMachine {
 		return true;
 	}
 
-	private Boolean propMarkDisjunction(Component c, Set<Proposition> props){
+	private Boolean propMarkDisjunction(Component c, Set<Component> props){
 		for ( Component component : c.getInputs() )
 		{
-			if ( getPropMark(component, props) )
+			if (props.contains(component) )
 			{
 				return true;
 			}
@@ -102,7 +103,7 @@ public class AliferousPropNetStateMachine extends StateMachine {
 	}
 
 	//Methods to find the value of the proposition
-	private Boolean getPropMark(Component c, Set<Proposition> props) {
+	private Boolean getPropMark(Component c, Set<Component> props) {
 		if (c instanceof Proposition) {
 			Proposition p = (Proposition) c;
 			if (!isViewProp(p)) {
@@ -154,6 +155,35 @@ public class AliferousPropNetStateMachine extends StateMachine {
 		}
 	}
 
+	private void forwardProp(Set<Component> props){
+		for(Component p : ordering){
+			Boolean addProp = false;
+			if(p instanceof Proposition){
+				addProp = props.contains(p.getSingleInput());
+			}
+			else {
+				if(p instanceof Not){
+					addProp = propMarkNegation(p, props);
+				}
+				else if(p instanceof And){
+					addProp = propMarkConjunction(p, props);
+				}
+				else if(p instanceof Or){
+					addProp = propMarkDisjunction(p, props);
+				}
+				else if(p instanceof Constant){
+					addProp = p.getValue();
+				}
+				else if (p instanceof Transition) {
+					addProp = props.contains(p.getSingleInput());
+				}
+			}
+			if (addProp) {
+				props.add(p);
+			}
+		}
+	}
+
 	/**
 	 * Initializes the PropNetStateMachine. You should compute the topological
 	 * ordering here. Additionally you may compute the initial state here, at
@@ -164,8 +194,14 @@ public class AliferousPropNetStateMachine extends StateMachine {
 		try {
 			propNet = OptimizingPropNetFactory.create(description);
 			roles = propNet.getRoles();
-			ordering = getOrdering();
 			setTypes();
+			ordering = getOrdering();
+			if (verifySort()) {
+				System.out.println("good order");
+			}
+			else {
+				System.out.println("bad order");
+			}
 		} catch (InterruptedException e) {
 			throw new RuntimeException(e);
 		}
@@ -177,9 +213,11 @@ public class AliferousPropNetStateMachine extends StateMachine {
 	 */
 	@Override
 	public boolean isTerminal(MachineState state) {
-		Set<Proposition> props = new HashSet<Proposition>();
+		Set<Component> props = new HashSet<Component>();
 		markBases(state, props);
-		Boolean result = getPropMark(propNet.getTerminalProposition(), props);
+		forwardProp(props);
+		Boolean result = props.contains(propNet.getTerminalProposition());
+		//Boolean result = getPropMark(propNet.getTerminalProposition(), props);
 		return result;
 	}
 
@@ -193,13 +231,15 @@ public class AliferousPropNetStateMachine extends StateMachine {
 	@Override
 	public int getGoal(MachineState state, Role role)
 			throws GoalDefinitionException {
-		Set<Proposition> props = new HashSet<Proposition>();
+		Set<Component> props = new HashSet<Component>();
 		markBases(state, props);
+		forwardProp(props);
 		Set<Proposition> goals = propNet.getGoalPropositions().get(role);
 		int count = 0;
 		Proposition prop = null;
+		//getPropMark(p, props)
 		for(Proposition p : goals){
-			if(getPropMark(p, props)){
+			if(props.contains(p)){
 				count++;
 				prop = p;
 			}
@@ -222,8 +262,9 @@ public class AliferousPropNetStateMachine extends StateMachine {
 	 */
 	@Override
 	public MachineState getInitialState() {
-		Set<Proposition> props = new HashSet<Proposition>();
+		Set<Component> props = new HashSet<Component>();
 		props.add(propNet.getInitProposition());
+		forwardProp(props);
 		return getStateFromBase(props);
 	}
 
@@ -233,12 +274,13 @@ public class AliferousPropNetStateMachine extends StateMachine {
 	@Override
 	public List<Move> getLegalMoves(MachineState state, Role role)
 			throws MoveDefinitionException {
-		Set<Proposition> props = new HashSet<Proposition>();
+		Set<Component> props = new HashSet<Component>();
 		markBases(state, props);
+		forwardProp(props);
 		Set<Proposition> legals = propNet.getLegalPropositions().get(role);
 		List<Move> moves = new ArrayList<Move>();
 		for (Proposition prop : legals) {
-			if (getPropMark(prop, props)) {
+			if (props.contains(prop)) {
 				moves.add(getMoveFromProposition(prop));
 			}
 		}
@@ -251,20 +293,12 @@ public class AliferousPropNetStateMachine extends StateMachine {
 	@Override
 	public MachineState getNextState(MachineState state, List<Move> moves)
 			throws TransitionDefinitionException {
-		Set<Proposition> props = new HashSet<Proposition>();
+		Set<Component> props = new HashSet<Component>();
 		markBases(state, props);
 		markActions(moves, props);
-		Map<Proposition, Boolean> propMap = new HashMap<Proposition, Boolean>();
-		for (Proposition p : propNet.getBasePropositions().values()) {
-			propMap.put(p, getPropMark(p.getSingleInput().getSingleInput(), props));
-		}
-		Set<GdlSentence> contents = new HashSet<GdlSentence>();
-		for (Proposition p : propNet.getBasePropositions().values()) {
-			if(propMap.get(p)) {
-				contents.add(p.getName());
-			}
-		}
-		return new MachineState(contents);
+		forwardProp(props);
+		return getStateFromBase(props);
+
 	}
 
 	/**
@@ -281,17 +315,15 @@ public class AliferousPropNetStateMachine extends StateMachine {
 	 *
 	 * @return The order in which the truth values of propositions need to be set.
 	 */
-	public List<Proposition> getOrdering()
+	public List<Component> getOrdering()
 	{
 		// List to contain the topological ordering.
-		List<Proposition> order = new LinkedList<Proposition>();
+		List<Component> order = new LinkedList<Component>();
 
 		// All of the components in the PropNet
 		List<Component> components = new ArrayList<Component>(propNet.getComponents());
 
 		// All of the propositions in the PropNet.
-		List<Proposition> propositions = new ArrayList<Proposition>(propNet.getPropositions());
-
 		Stack<Component> stack = new Stack<Component>();
 
 		// Mark all the vertices as not visited
@@ -303,40 +335,80 @@ public class AliferousPropNetStateMachine extends StateMachine {
 		// Call the recursive helper function to store
 		// Topological Sort starting from all vertices
 		// one by one
+		Set<Component> tempVisited = new HashSet<Component>();
 		for (Component c : components){
 			if(!visited.get(c)){
-				topologicalSortUtil(c, visited, stack);
+				tempVisited.clear();
+				topologicalSortUtil(c, visited, stack, tempVisited);
 			}
 		}
 		// Print contents of stack
 		while (!stack.empty()){
 			Component c = stack.pop();
-			if(propositions.contains(c)){
-				Proposition q = (Proposition) c;
-				if(isViewProp(q)){
-					order.add(q);
+			if(c instanceof Proposition){
+				Proposition p = (Proposition) c;
+				if(p.getType() == Proposition.PropType.VIEW){
+					order.add(c);
 				}
+			}
+			else{
+				order.add(c);
 			}
 		}
 		return order;
 	}
 
-	void topologicalSortUtil(Component c, Map<Component,Boolean> visited, Stack<Component> stack)
+	void topologicalSortUtil(Component c, Map<Component,Boolean> visited, Stack<Component> stack, Set<Component> tempVisited)
 	{
 		// Mark the current node as visited.
-		visited.put(c, true);
-
-		// Recur for all the vertices adjacent to this
-		// vertex
+		if (visited.get(c)) {
+			return;
+		}
+		if (c instanceof Proposition) {
+			Proposition p = (Proposition) c;
+			if (p.getType() != Proposition.PropType.VIEW) {
+				return;
+			}
+		}
+		tempVisited.add(c);
 
 		for (Component output : c.getOutputs())
 		{
-			if (!visited.get(output))
-				topologicalSortUtil(output, visited, stack);
+			topologicalSortUtil(output, visited, stack, tempVisited);
 		}
-
-		// Push current vertex to stack which stores result
+		visited.put(c, true);
+		tempVisited.remove(c);
 		stack.push(c);
+	}
+
+	public void getInputProps(Component c, Set<Component> comps) {
+		for (Component input : c.getInputs()) {
+			if (input instanceof Proposition) {
+				comps.add(input);
+			}
+			else {
+				getInputProps(input, comps);
+			}
+		}
+	}
+
+	public Boolean verifySort() {
+		Set<Component> seenComponents = new HashSet<Component>();
+		for (Component c : ordering) {
+			seenComponents.add(c);
+			for (Component input : c.getInputs()) {
+				if (input instanceof Proposition) {
+					Proposition p = (Proposition) input;
+					if (p.getType() != Proposition.PropType.VIEW) {
+						continue;
+					}
+				}
+				if (!seenComponents.contains(input)) {
+					return false;
+				}
+			}
+		}
+		return true;
 	}
 
 
@@ -402,17 +474,16 @@ public class AliferousPropNetStateMachine extends StateMachine {
 	 * You need not use this method!
 	 * @return PropNetMachineState
 	 */
-	public MachineState getStateFromBase(Set<Proposition> props)
+	public MachineState getStateFromBase(Set<Component> props)
 	{
-		Map<Proposition, Boolean> propMap = new HashMap<Proposition, Boolean>();
-		for (Proposition p : propNet.getBasePropositions().values()) {
-			propMap.put(p, getPropMark(p.getSingleInput().getSingleInput(), props));
-		}
 		Set<GdlSentence> contents = new HashSet<GdlSentence>();
-		for (Proposition p : propNet.getBasePropositions().values()) {
-			if(propMap.get(p)) {
+		for (Proposition p : propNet.getBasePropositions().values())
+		{
+			if (props.contains(p.getSingleInput()))
+			{
 				contents.add(p.getName());
 			}
+
 		}
 		return new MachineState(contents);
 	}
