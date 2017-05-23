@@ -37,7 +37,7 @@ public class AliferousForwardPropNetStateMachine extends StateMachine {
 	/** The underlying proposition network  */
 	private PropNet propNet;
 	/** The topological ordering of the propositions */
-	private List<Proposition> ordering;
+	private List<Component> ordering;
 	/** The player roles */
 	private List<Role> roles;
 
@@ -72,11 +72,11 @@ public class AliferousForwardPropNetStateMachine extends StateMachine {
 		propNet.getInitProposition().setValue(false);
 	}
 
-	private Boolean propMarkNegation(Component c, Set<Proposition> props){
+	private Boolean propMarkNegation(Component c, Set<Component> props){
 		return !props.contains(c.getSingleInput());
 	}
 
-	private Boolean propMarkConjunction(Component c, Set<Proposition> props){
+	private Boolean propMarkConjunction(Component c, Set<Component> props){
 		for ( Component component : c.getInputs() )
 		{
 			if (!props.contains(component))
@@ -87,7 +87,7 @@ public class AliferousForwardPropNetStateMachine extends StateMachine {
 		return true;
 	}
 
-	private Boolean propMarkDisjunction(Component c, Set<Proposition> props){
+	private Boolean propMarkDisjunction(Component c, Set<Component> props){
 		for ( Component component : c.getInputs() )
 		{
 			if (props.contains(component) )
@@ -103,7 +103,7 @@ public class AliferousForwardPropNetStateMachine extends StateMachine {
 	}
 
 	//Methods to find the value of the proposition
-	private Boolean getPropMark(Component c, Set<Proposition> props) {
+	private Boolean getPropMark(Component c, Set<Component> props) {
 		if (c instanceof Proposition) {
 			Proposition p = (Proposition) c;
 			if (!isViewProp(p)) {
@@ -156,38 +156,37 @@ public class AliferousForwardPropNetStateMachine extends StateMachine {
 	}
 
 	private void forwardProp(Set<Proposition> props){
-		Map<Component, Boolean> compValues = new HashMap<Component, Boolean>();
-		for(Proposition p : ordering){
-			Component c = p.getSingleInput();
+		Set<Component> comps = new HashSet<Component>();
+		for(Proposition p : props){
+			comps.add(p);
+		}
+		for(Component p : ordering){
 			Boolean addProp = false;
-			if(c instanceof Proposition){
-				addProp = props.contains(c);
+			if(p instanceof Proposition){
+				addProp = props.contains(p.getSingleInput());
 			}
 			else {
-				if (compValues.containsKey(c)) {
-					addProp = compValues.get(c);
+				if(p instanceof Not){
+					addProp = propMarkNegation(p, comps);
 				}
-				else {
-					if(c instanceof Not){
-						addProp = propMarkNegation(c, props);
-					}
-					else if(c instanceof And){
-						addProp = propMarkConjunction(c, props);
-					}
-					else if(c instanceof Or){
-						addProp = propMarkDisjunction(c, props);
-					}
-					else if(c instanceof Constant){
-						addProp = c.getValue();
-					}
-					else if (c instanceof Transition) {
-						addProp = props.contains(c.getSingleInput());
-					}
-					compValues.put(c, addProp);
+				else if(p instanceof And){
+					addProp = propMarkConjunction(p, comps);
+				}
+				else if(p instanceof Or){
+					addProp = propMarkDisjunction(p, comps);
+				}
+				else if(p instanceof Constant){
+					addProp = p.getValue();
+				}
+				else if (p instanceof Transition) {
+					addProp = props.contains(p.getSingleInput());
 				}
 			}
 			if (addProp) {
-				props.add(p);
+				comps.add(p);
+				if(p instanceof Proposition){
+					props.add((Proposition) p);
+				}
 			}
 
 		}
@@ -324,17 +323,15 @@ public class AliferousForwardPropNetStateMachine extends StateMachine {
 	 *
 	 * @return The order in which the truth values of propositions need to be set.
 	 */
-	public List<Proposition> getOrdering()
+	public List<Component> getOrdering()
 	{
 		// List to contain the topological ordering.
-		List<Proposition> order = new LinkedList<Proposition>();
+		List<Component> order = new LinkedList<Component>();
 
 		// All of the components in the PropNet
 		List<Component> components = new ArrayList<Component>(propNet.getComponents());
 
 		// All of the propositions in the PropNet.
-		List<Proposition> propositions = new ArrayList<Proposition>(propNet.getPropositions());
-
 		Stack<Component> stack = new Stack<Component>();
 
 		// Mark all the vertices as not visited
@@ -354,11 +351,14 @@ public class AliferousForwardPropNetStateMachine extends StateMachine {
 		// Print contents of stack
 		while (!stack.empty()){
 			Component c = stack.pop();
-			if(propositions.contains(c)){
-				Proposition q = (Proposition) c;
-				if(isViewProp(q)){
-					order.add(q);
+			if(c instanceof Proposition){
+				Proposition p = (Proposition) c;
+				if(p.getType() == Proposition.PropType.VIEW){
+					order.add(c);
 				}
+			}
+			else{
+				order.add(c);
 			}
 		}
 		return order;
@@ -398,7 +398,7 @@ public class AliferousForwardPropNetStateMachine extends StateMachine {
 			for (Component input : inputProps) {
 				if (input instanceof Proposition) {
 					Proposition p = (Proposition) input;
-					if (p.getType() != Proposition.PropType.VIEW) {
+					if (p.getType() != Proposition	.PropType.VIEW) {
 						continue;
 					}
 					if (!seenComponents.contains(input)) {

@@ -16,7 +16,7 @@ import org.ggp.base.util.statemachine.StateMachine;
 import org.ggp.base.util.statemachine.exceptions.GoalDefinitionException;
 import org.ggp.base.util.statemachine.exceptions.MoveDefinitionException;
 import org.ggp.base.util.statemachine.exceptions.TransitionDefinitionException;
-import org.ggp.base.util.statemachine.implementation.propnet.AliferousPropNetStateMachine;
+import org.ggp.base.util.statemachine.implementation.propnet.AliferousForwardPropNetStateMachine;
 
 
 public class AliferousPropNetPlayer extends StateMachineGamer {
@@ -75,7 +75,7 @@ public class AliferousPropNetPlayer extends StateMachineGamer {
 		maxScoreFound = 0;
 		totalScores = 0;
 		singlePlayer = false;
-		StateMachine machine = new AliferousPropNetStateMachine();
+		StateMachine machine = new AliferousForwardPropNetStateMachine();
 		return machine;
 	}
 
