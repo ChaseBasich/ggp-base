@@ -43,7 +43,7 @@ public class AliferousForwardPropNetStateMachine extends StateMachine {
 
 	//private methods
 	//mark the bases of the propnet
-	private void markBases(MachineState state, Set<Proposition> bases) {
+	private void markBases(MachineState state, Set<Component> bases) {
 		Map<GdlSentence, Proposition> map = propNet.getBasePropositions();
 		Set<GdlSentence> sentences = state.getContents();
 		for (GdlSentence sentence : sentences) {
@@ -52,7 +52,7 @@ public class AliferousForwardPropNetStateMachine extends StateMachine {
 		}
 	}
 
-	private void markActions(List<Move> moves, Set<Proposition> inputs) {
+	private void markActions(List<Move> moves, Set<Component> inputs) {
 		Map<GdlSentence, Proposition> map = propNet.getInputPropositions();
 		List<GdlSentence> does = toDoes(moves);
 		for (GdlSentence sentence : does) {
@@ -155,11 +155,7 @@ public class AliferousForwardPropNetStateMachine extends StateMachine {
 		}
 	}
 
-	private void forwardProp(Set<Proposition> props){
-		Set<Component> comps = new HashSet<Component>();
-		for(Proposition p : props){
-			comps.add(p);
-		}
+	private void forwardProp(Set<Component> props){
 		for(Component p : ordering){
 			Boolean addProp = false;
 			if(p instanceof Proposition){
@@ -167,13 +163,13 @@ public class AliferousForwardPropNetStateMachine extends StateMachine {
 			}
 			else {
 				if(p instanceof Not){
-					addProp = propMarkNegation(p, comps);
+					addProp = propMarkNegation(p, props);
 				}
 				else if(p instanceof And){
-					addProp = propMarkConjunction(p, comps);
+					addProp = propMarkConjunction(p, props);
 				}
 				else if(p instanceof Or){
-					addProp = propMarkDisjunction(p, comps);
+					addProp = propMarkDisjunction(p, props);
 				}
 				else if(p instanceof Constant){
 					addProp = p.getValue();
@@ -183,12 +179,8 @@ public class AliferousForwardPropNetStateMachine extends StateMachine {
 				}
 			}
 			if (addProp) {
-				comps.add(p);
-				if(p instanceof Proposition){
-					props.add((Proposition) p);
-				}
+				props.add(p);
 			}
-
 		}
 	}
 
@@ -221,7 +213,7 @@ public class AliferousForwardPropNetStateMachine extends StateMachine {
 	 */
 	@Override
 	public boolean isTerminal(MachineState state) {
-		Set<Proposition> props = new HashSet<Proposition>();
+		Set<Component> props = new HashSet<Component>();
 		markBases(state, props);
 		forwardProp(props);
 		Boolean result = props.contains(propNet.getTerminalProposition());
@@ -239,7 +231,7 @@ public class AliferousForwardPropNetStateMachine extends StateMachine {
 	@Override
 	public int getGoal(MachineState state, Role role)
 			throws GoalDefinitionException {
-		Set<Proposition> props = new HashSet<Proposition>();
+		Set<Component> props = new HashSet<Component>();
 		markBases(state, props);
 		forwardProp(props);
 		Set<Proposition> goals = propNet.getGoalPropositions().get(role);
@@ -270,7 +262,7 @@ public class AliferousForwardPropNetStateMachine extends StateMachine {
 	 */
 	@Override
 	public MachineState getInitialState() {
-		Set<Proposition> props = new HashSet<Proposition>();
+		Set<Component> props = new HashSet<Component>();
 		props.add(propNet.getInitProposition());
 		forwardProp(props);
 		return getStateFromBase(props);
@@ -282,7 +274,7 @@ public class AliferousForwardPropNetStateMachine extends StateMachine {
 	@Override
 	public List<Move> getLegalMoves(MachineState state, Role role)
 			throws MoveDefinitionException {
-		Set<Proposition> props = new HashSet<Proposition>();
+		Set<Component> props = new HashSet<Component>();
 		markBases(state, props);
 		forwardProp(props);
 		Set<Proposition> legals = propNet.getLegalPropositions().get(role);
@@ -301,7 +293,7 @@ public class AliferousForwardPropNetStateMachine extends StateMachine {
 	@Override
 	public MachineState getNextState(MachineState state, List<Move> moves)
 			throws TransitionDefinitionException {
-		Set<Proposition> props = new HashSet<Proposition>();
+		Set<Component> props = new HashSet<Component>();
 		markBases(state, props);
 		markActions(moves, props);
 		forwardProp(props);
@@ -343,9 +335,11 @@ public class AliferousForwardPropNetStateMachine extends StateMachine {
 		// Call the recursive helper function to store
 		// Topological Sort starting from all vertices
 		// one by one
+		Set<Component> tempVisited = new HashSet<Component>();
 		for (Component c : components){
 			if(!visited.get(c)){
-				topologicalSortUtil(c, visited, stack);
+				tempVisited.clear();
+				topologicalSortUtil(c, visited, stack, tempVisited);
 			}
 		}
 		// Print contents of stack
@@ -364,17 +358,26 @@ public class AliferousForwardPropNetStateMachine extends StateMachine {
 		return order;
 	}
 
-	void topologicalSortUtil(Component c, Map<Component,Boolean> visited, Stack<Component> stack)
+	void topologicalSortUtil(Component c, Map<Component,Boolean> visited, Stack<Component> stack, Set<Component> tempVisited)
 	{
 		// Mark the current node as visited.
-		visited.put(c, true);
+		if (visited.get(c)) {
+			return;
+		}
+		if (c instanceof Proposition) {
+			Proposition p = (Proposition) c;
+			if (p.getType() != Proposition.PropType.VIEW) {
+				return;
+			}
+		}
+		tempVisited.add(c);
 
 		for (Component output : c.getOutputs())
 		{
-			if (!visited.get(output))
-				topologicalSortUtil(output, visited, stack);
+			topologicalSortUtil(output, visited, stack, tempVisited);
 		}
-
+		visited.put(c, true);
+		tempVisited.remove(c);
 		stack.push(c);
 	}
 
@@ -393,17 +396,15 @@ public class AliferousForwardPropNetStateMachine extends StateMachine {
 		Set<Component> seenComponents = new HashSet<Component>();
 		for (Component c : ordering) {
 			seenComponents.add(c);
-			Set<Component> inputProps = new HashSet<Component>();
-			getInputProps(c, inputProps);
-			for (Component input : inputProps) {
+			for (Component input : c.getInputs()) {
 				if (input instanceof Proposition) {
 					Proposition p = (Proposition) input;
-					if (p.getType() != Proposition	.PropType.VIEW) {
+					if (p.getType() != Proposition.PropType.VIEW) {
 						continue;
 					}
-					if (!seenComponents.contains(input)) {
-						return false;
-					}
+				}
+				if (!seenComponents.contains(input)) {
+					return false;
 				}
 			}
 		}
@@ -473,12 +474,12 @@ public class AliferousForwardPropNetStateMachine extends StateMachine {
 	 * You need not use this method!
 	 * @return PropNetMachineState
 	 */
-	public MachineState getStateFromBase(Set<Proposition> props)
+	public MachineState getStateFromBase(Set<Component> props)
 	{
 		Set<GdlSentence> contents = new HashSet<GdlSentence>();
 		for (Proposition p : propNet.getBasePropositions().values())
 		{
-			if (props.contains(p.getSingleInput().getSingleInput()))
+			if (props.contains(p.getSingleInput()))
 			{
 				contents.add(p.getName());
 			}

@@ -19,7 +19,7 @@ import org.ggp.base.util.statemachine.exceptions.TransitionDefinitionException;
 import org.ggp.base.util.statemachine.implementation.propnet.AliferousForwardPropNetStateMachine;
 
 
-public class AliferousPropNetPlayer extends StateMachineGamer {
+public class AliferousBackPropNetPlayer extends StateMachineGamer {
 
 	//Constants - Adjust these to change how the AI structures its time
 
@@ -768,8 +768,11 @@ public class AliferousPropNetPlayer extends StateMachineGamer {
 		if (timeTaken > 1000) {
 			averageCharges = totalCharges/(timeTaken/1000);
 		}
+		else {
+
+		}
 		System.out.println("\nTime taken in milliseconds: " + timeTaken);
-		System.out.println("Average forprop-threaded charges per second: " + averageCharges);
+		System.out.println("Average backprop-threaded charges per second: " + averageCharges);
 		findNode = true;
 
 		//Only find the best move if there is more than 1 choice
@@ -824,7 +827,7 @@ public class AliferousPropNetPlayer extends StateMachineGamer {
 
 	@Override
 	public String getName() {
-		return "Aliferous-ForProp";
+		return "Aliferous-BackProp";
 	}
 
 
