@@ -764,7 +764,13 @@ public class AliferousPropNetPlayer extends StateMachineGamer {
 			totalCharges += 4;
 		}
 		long timeTaken = System.currentTimeMillis() - startTime;
-		float averageCharges = totalCharges/(timeTaken/1000);
+		float averageCharges = 0.f;
+		if (timeTaken > 1000) {
+			averageCharges = totalCharges/(timeTaken/1000);
+		}
+		else {
+
+		}
 		System.out.println("\nTime taken in milliseconds: " + timeTaken);
 		System.out.println("Average prop-threaded charges per second: " + averageCharges);
 		findNode = true;
