@@ -14,6 +14,13 @@ public class Proposition extends Component
 	/** The value of the Proposition. */
 	private boolean value;
 
+	//for faster determination of type
+	public enum PropType {
+		VIEW, INPUT, BASE, OTHER
+	}
+
+	private PropType type;
+
 	/**
 	 * Creates a new Proposition with name <tt>name</tt>.
 	 *
@@ -47,6 +54,26 @@ public class Proposition extends Component
     public void setName(GdlSentence newName)
     {
         name = newName;
+    }
+
+
+    /**
+     *  Getter Method.
+     *
+     *  @return The type of the proposition.
+     */
+    public PropType getType() {
+    	return type;
+    }
+
+    /**
+     *  Setter Method
+     *
+     *  @param type
+     *  The type of the proposition
+     */
+    public void setType(PropType newType) {
+    	type = newType;
     }
 
 	/**
