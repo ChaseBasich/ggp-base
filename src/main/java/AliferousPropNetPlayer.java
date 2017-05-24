@@ -92,12 +92,13 @@ public class AliferousPropNetPlayer extends StateMachineGamer {
 	@Override
 	public void stateMachineMetaGame(long timeout)
 			throws TransitionDefinitionException, MoveDefinitionException, GoalDefinitionException {
-		StateMachine machine = getStateMachine();
+		AliferousForwardPropNetStateMachine machine = (AliferousForwardPropNetStateMachine) getStateMachine();
 		MachineState state = machine.getInitialState();
 		currNode = new Node(state, null, null, true);
 
 		if (machine.getRoles().size() == 1) {
 			singlePlayer = true;
+			System.out.println("Num subgames " + machine.numSubGames(getRole()));
 		}
 
 		long startTime = System.currentTimeMillis();
