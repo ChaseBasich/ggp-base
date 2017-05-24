@@ -339,8 +339,10 @@ public class AliferousForwardPropNetStateMachine extends StateMachine {
 		Set<Proposition> goals = propNet.getGoalPropositions().get(role);
 		factoring = true;
 		Set<Proposition> newGoals = new HashSet<Proposition>();
+		Set<Proposition> zeroGoals = new HashSet<Proposition>();
 		for (Proposition goal : goals) {
 			if (getGoalValue(goal) == 0) {
+				zeroGoals.add(goal);
 				continue;
 			}
 			Component goalInput = goal.getSingleInput();
@@ -355,15 +357,17 @@ public class AliferousForwardPropNetStateMachine extends StateMachine {
 					}
 					newGoals.add(newGoal);
 				}
-				goals.remove(goal);
 				goalInput.removeOutput(goal);
 				goal.removeInput(goalInput);
 			}
 		}
+		goals.clear();
+		goals.addAll(zeroGoals);
 		goals.addAll(newGoals);
 
 		int maxScore = 1;
 		int numInputs = 10000000;
+		Proposition bestGoal = null;
 
 		for (Proposition goal : goals) {
 			if (getGoalValue(goal) < maxScore) {
@@ -372,10 +376,12 @@ public class AliferousForwardPropNetStateMachine extends StateMachine {
 			maxScore = getGoalValue(goal);
 			Set<Move> inputs = new HashSet<Move>();
 			findInputs(goal, inputs);
-			if (inputs.size() < goodInputs.size()) {
-				goodInputs = inputs;
-			}
+			bestGoal = goal;
+			goodInputs = inputs;
 		}
+		goals.clear();
+		goals.addAll(zeroGoals);
+		goals.add(bestGoal);
 
 		return newGoals.size();
 	}
