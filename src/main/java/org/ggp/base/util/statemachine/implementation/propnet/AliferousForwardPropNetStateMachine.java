@@ -6,6 +6,7 @@ import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.Queue;
 import java.util.Set;
 import java.util.Stack;
 
@@ -40,6 +41,10 @@ public class AliferousForwardPropNetStateMachine extends StateMachine {
 	private List<Component> ordering;
 	/** The player roles */
 	private List<Role> roles;
+
+	private Set<Move> goodInputs;
+
+	private Boolean factoring;
 
 	//private methods
 	//mark the bases of the propnet
@@ -192,6 +197,8 @@ public class AliferousForwardPropNetStateMachine extends StateMachine {
 	@Override
 	public void initialize(List<Gdl> description) {
 		try {
+			goodInputs = new HashSet<Move>();
+			factoring = false;
 			propNet = OptimizingPropNetFactory.create(description);
 			roles = propNet.getRoles();
 			setTypes();
@@ -281,6 +288,11 @@ public class AliferousForwardPropNetStateMachine extends StateMachine {
 		List<Move> moves = new ArrayList<Move>();
 		for (Proposition prop : legals) {
 			if (props.contains(prop)) {
+				if (factoring) {
+					if (!goodInputs.contains(getMoveFromProposition(prop))) {
+						continue;
+					}
+				}
 				moves.add(getMoveFromProposition(prop));
 			}
 		}
@@ -298,6 +310,74 @@ public class AliferousForwardPropNetStateMachine extends StateMachine {
 		markActions(moves, props);
 		forwardProp(props);
 		return getStateFromBase(props);
+	}
+
+	private void findInputs(Proposition goal, Set<Move> inputs) {
+		Set<Component> seen = new HashSet<Component>();
+		Queue<Component> toExplore = new LinkedList<Component>();
+		toExplore.add(goal);
+		while(!toExplore.isEmpty()) {
+			Component c = toExplore.poll();
+			for (Component input : c.getInputs()) {
+				if (seen.contains(input)) {
+					continue;
+				}
+				if (input instanceof Proposition) {
+					Proposition p = (Proposition) input;
+					if ((p.getType() == Proposition.PropType.INPUT)) {
+						inputs.add(getMoveFromProposition(p));
+						continue;
+					}
+				}
+				toExplore.add(input);
+				seen.add(input);
+			}
+		}
+	}
+
+	public int numSubGames(Role role) {
+		Set<Proposition> goals = propNet.getGoalPropositions().get(role);
+		factoring = true;
+		Set<Proposition> newGoals = new HashSet<Proposition>();
+		for (Proposition goal : goals) {
+			if (getGoalValue(goal) == 0) {
+				continue;
+			}
+			Component goalInput = goal.getSingleInput();
+			if (goalInput instanceof Or) {
+				for (Component c : goalInput.getInputs()) {
+					Proposition newGoal = new Proposition(goal.getName());
+					newGoal.addInput(c);
+					c.removeOutput(goalInput);
+					c.addOutput(newGoal);
+					for(Component output : goal.getOutputs()) {
+						newGoal.addOutput(output);
+					}
+					newGoals.add(newGoal);
+				}
+				goals.remove(goal);
+				goalInput.removeOutput(goal);
+				goal.removeInput(goalInput);
+			}
+		}
+		goals.addAll(newGoals);
+
+		int maxScore = 1;
+		int numInputs = 10000000;
+
+		for (Proposition goal : goals) {
+			if (getGoalValue(goal) < maxScore) {
+				continue;
+			}
+			maxScore = getGoalValue(goal);
+			Set<Move> inputs = new HashSet<Move>();
+			findInputs(goal, inputs);
+			if (inputs.size() < goodInputs.size()) {
+				goodInputs = inputs;
+			}
+		}
+
+		return newGoals.size();
 	}
 
 	/**
