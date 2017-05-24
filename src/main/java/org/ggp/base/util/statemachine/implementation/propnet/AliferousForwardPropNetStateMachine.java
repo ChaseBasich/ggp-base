@@ -382,7 +382,6 @@ public class AliferousForwardPropNetStateMachine extends StateMachine {
 		goals.addAll(newGoals);
 
 		int maxScore = 1;
-		Proposition bestGoal = null;
 
 		for (Proposition goal : goals) {
 			int goalValue = getGoalValue(goal);
@@ -392,7 +391,6 @@ public class AliferousForwardPropNetStateMachine extends StateMachine {
 			maxScore = getGoalValue(goal);
 			Set<Move> inputs = new HashSet<Move>();
 			findInputs(goal, inputs);
-			bestGoal = goal;
 			goodInputs = inputs;
 		}
 		ordering = getOrdering();

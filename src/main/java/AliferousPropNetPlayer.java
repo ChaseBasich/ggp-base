@@ -105,7 +105,6 @@ public class AliferousPropNetPlayer extends StateMachineGamer {
 		machine.getNextState(state, machine.getRandomJointMove(state));
 		long totalTime = System.currentTimeMillis() - startTime;
 
-
 		if(totalTime > 100) {
 			useHeuristics = true;
 		}
