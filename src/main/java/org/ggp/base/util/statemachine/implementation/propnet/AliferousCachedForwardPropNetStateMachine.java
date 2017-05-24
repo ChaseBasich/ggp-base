@@ -554,7 +554,7 @@ public class AliferousCachedForwardPropNetStateMachine extends StateMachine {
 
 		Map<GdlSentence, Proposition> map = propNet.getInputPropositions();
 		List<GdlSentence> does = toDoes(moves);
-		for (GdlSentence sentence : does) {
+		for (GdlSentence sentence : map.keySet()) {
 			inputs.add(map.get(sentence));
 		}
 

@@ -65,18 +65,6 @@ public class AliferousForwardPropNetStateMachine extends StateMachine {
 		}
 	}
 
-	private void clearPropNet(Map<Proposition, Boolean> bases) {
-		Map<GdlSentence, Proposition> map = propNet.getBasePropositions();
-		for (Proposition p : map.values()) {
-			bases.put(p, false);
-		}
-		map = propNet.getInputPropositions();
-		for (Proposition p : map.values()) {
-			p.setValue(false);
-		}
-		propNet.getInitProposition().setValue(false);
-	}
-
 	private Boolean propMarkNegation(Component c, Set<Component> props){
 		return !props.contains(c.getSingleInput());
 	}
@@ -108,29 +96,56 @@ public class AliferousForwardPropNetStateMachine extends StateMachine {
 	}
 
 	//Methods to find the value of the proposition
-	private Boolean getPropMark(Component c, Set<Component> props) {
+	private Boolean propValueNegation(Component c, Set<Component> props){
+		return !getPropValue(c.getSingleInput(), props);
+	}
+
+	private Boolean propValueConjunction(Component c, Set<Component> props){
+		for ( Component component : c.getInputs() )
+		{
+			if (!getPropValue(component, props))
+			{
+				return false;
+			}
+		}
+		return true;
+	}
+
+	private Boolean propValueDisjunction(Component c, Set<Component> props){
+		for ( Component component : c.getInputs() )
+		{
+			if (getPropValue(component, props))
+			{
+				return true;
+			}
+		}
+		return false;
+	}
+
+	//Methods to find the value of the proposition
+	private Boolean getPropValue(Component c, Set<Component> props) {
 		if (c instanceof Proposition) {
 			Proposition p = (Proposition) c;
 			if (!isViewProp(p)) {
 				return props.contains(p);
 			}
-			return getPropMark(p.getSingleInput(), props);
+			return getPropValue(p.getSingleInput(), props);
 		}
 
 		if (c instanceof Not){
-			return propMarkNegation(c, props);
+			return propValueNegation(c, props);
 		}
 
 		if (c instanceof And){
-			return propMarkConjunction(c, props);
+			return propValueConjunction(c, props);
 		}
 
 		if (c instanceof Or){
-			return propMarkDisjunction(c, props);
+			return propValueDisjunction(c, props);
 		}
 
 		if (c instanceof Transition){
-			return getPropMark(c.getSingleInput(), props);
+			return getPropValue(c.getSingleInput(), props);
 		}
 
 		return c.getValue();
@@ -222,8 +237,7 @@ public class AliferousForwardPropNetStateMachine extends StateMachine {
 	public boolean isTerminal(MachineState state) {
 		Set<Component> props = new HashSet<Component>();
 		markBases(state, props);
-		forwardProp(props);
-		Boolean result = props.contains(propNet.getTerminalProposition());
+		Boolean result = getPropValue(propNet.getTerminalProposition(), props);
 		//Boolean result = getPropMark(propNet.getTerminalProposition(), props);
 		return result;
 	}
@@ -240,13 +254,12 @@ public class AliferousForwardPropNetStateMachine extends StateMachine {
 			throws GoalDefinitionException {
 		Set<Component> props = new HashSet<Component>();
 		markBases(state, props);
-		forwardProp(props);
 		Set<Proposition> goals = propNet.getGoalPropositions().get(role);
 		int count = 0;
 		Proposition prop = null;
 		//getPropMark(p, props)
 		for(Proposition p : goals){
-			if(props.contains(p)){
+			if(getPropValue(p.getSingleInput(), props)){
 				count++;
 				prop = p;
 			}
@@ -283,11 +296,10 @@ public class AliferousForwardPropNetStateMachine extends StateMachine {
 			throws MoveDefinitionException {
 		Set<Component> props = new HashSet<Component>();
 		markBases(state, props);
-		forwardProp(props);
 		Set<Proposition> legals = propNet.getLegalPropositions().get(role);
 		List<Move> moves = new ArrayList<Move>();
 		for (Proposition prop : legals) {
-			if (props.contains(prop)) {
+			if (getPropValue(prop, props)) {
 				if (factoring) {
 					if (!goodInputs.contains(getMoveFromProposition(prop))) {
 						continue;
@@ -337,12 +349,11 @@ public class AliferousForwardPropNetStateMachine extends StateMachine {
 
 	public int numSubGames(Role role) {
 		Set<Proposition> goals = propNet.getGoalPropositions().get(role);
+		Set<Proposition> removedGoals = new HashSet<Proposition>();
 		factoring = true;
 		Set<Proposition> newGoals = new HashSet<Proposition>();
-		Set<Proposition> zeroGoals = new HashSet<Proposition>();
 		for (Proposition goal : goals) {
 			if (getGoalValue(goal) == 0) {
-				zeroGoals.add(goal);
 				continue;
 			}
 			Component goalInput = goal.getSingleInput();
@@ -356,21 +367,26 @@ public class AliferousForwardPropNetStateMachine extends StateMachine {
 						newGoal.addOutput(output);
 					}
 					newGoals.add(newGoal);
+					propNet.addComponent(newGoal);
 				}
+				propNet.removeComponent(goalInput);
 				goalInput.removeOutput(goal);
 				goal.removeInput(goalInput);
+				removedGoals.add(goal);
 			}
 		}
-		goals.clear();
-		goals.addAll(zeroGoals);
+		for (Proposition goal : removedGoals) {
+			propNet.removeComponent(goal);
+			goals.remove(goal);
+		}
 		goals.addAll(newGoals);
 
 		int maxScore = 1;
-		int numInputs = 10000000;
 		Proposition bestGoal = null;
 
 		for (Proposition goal : goals) {
-			if (getGoalValue(goal) < maxScore) {
+			int goalValue = getGoalValue(goal);
+			if (goalValue < maxScore) {
 				continue;
 			}
 			maxScore = getGoalValue(goal);
@@ -379,9 +395,7 @@ public class AliferousForwardPropNetStateMachine extends StateMachine {
 			bestGoal = goal;
 			goodInputs = inputs;
 		}
-		goals.clear();
-		goals.addAll(zeroGoals);
-		goals.add(bestGoal);
+		ordering = getOrdering();
 
 		return newGoals.size();
 	}

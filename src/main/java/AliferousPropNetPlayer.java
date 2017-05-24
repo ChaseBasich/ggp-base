@@ -380,7 +380,8 @@ public class AliferousPropNetPlayer extends StateMachineGamer {
 																MoveDefinitionException, TransitionDefinitionException {
 		StateMachine machine = getStateMachine();
 		if (machine.isTerminal(state)) {
-			return machine.getGoal(state, getRole());
+			int goal = machine.getGoal(state, getRole());
+			return goal;
 		}
 		if (outOfTime(timeout)) {
 			return 0;
