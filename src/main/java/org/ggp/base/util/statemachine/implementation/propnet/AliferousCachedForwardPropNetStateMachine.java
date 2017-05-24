@@ -6,6 +6,7 @@ import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.Random;
 import java.util.Set;
 import java.util.Stack;
 
@@ -90,34 +91,60 @@ public class AliferousCachedForwardPropNetStateMachine extends StateMachine {
 		return false;
 	}
 
+	private Boolean propValueNegation(Component c, Set<Component> props){
+		return !getPropValue(c.getSingleInput(), props);
+	}
+
+	private Boolean propValueConjunction(Component c, Set<Component> props){
+		for ( Component component : c.getInputs() )
+		{
+			if (!getPropValue(component, props))
+			{
+				return false;
+			}
+		}
+		return true;
+	}
+
+	private Boolean propValueDisjunction(Component c, Set<Component> props){
+		for ( Component component : c.getInputs() )
+		{
+			if (getPropValue(component, props))
+			{
+				return true;
+			}
+		}
+		return false;
+	}
+
 	private Boolean isViewProp(Proposition p){
 		return p.getType() == Proposition.PropType.VIEW;
 	}
 
 	//Methods to find the value of the proposition
-	private Boolean getPropMark(Component c, Set<Component> props) {
+	private Boolean getPropValue(Component c, Set<Component> props) {
 		if (c instanceof Proposition) {
 			Proposition p = (Proposition) c;
 			if (!isViewProp(p)) {
 				return props.contains(p);
 			}
-			return getPropMark(p.getSingleInput(), props);
+			return getPropValue(p.getSingleInput(), props);
 		}
 
 		if (c instanceof Not){
-			return propMarkNegation(c, props);
+			return propValueNegation(c, props);
 		}
 
 		if (c instanceof And){
-			return propMarkConjunction(c, props);
+			return propValueConjunction(c, props);
 		}
 
 		if (c instanceof Or){
-			return propMarkDisjunction(c, props);
+			return propValueDisjunction(c, props);
 		}
 
 		if (c instanceof Transition){
-			return getPropMark(c.getSingleInput(), props);
+			return getPropValue(c.getSingleInput(), props);
 		}
 
 		return c.getValue();
@@ -199,18 +226,62 @@ public class AliferousCachedForwardPropNetStateMachine extends StateMachine {
 		}
 	}
 
+	public void initializeCache(int numThreads) {
+		cache = new HashMap<MachineState, Set<Component> >();
+		threadSets = new ArrayList<Set<Component> >();
+		for (int i = 0; i < numThreads; i++) {
+			threadSets.add(new HashSet<Component>());
+		}
+	}
+
+	private Set<Component> getProps(MachineState state) {
+		Set<Component> props;
+		if (cache.containsKey(state)) {
+			props = cache.get(state);
+		}
+		else {
+			props = new HashSet<Component>();
+			markBases(state, props);
+		}
+		return props;
+	}
+
 	/**
 	 * Computes if the state is terminal. Should return the value
 	 * of the terminal proposition for the state.
 	 */
 	@Override
 	public boolean isTerminal(MachineState state) {
-		Set<Component> props = new HashSet<Component>();
-		markBases(state, props);
-		forwardProp(props);
-		Boolean result = props.contains(propNet.getTerminalProposition());
-		//Boolean result = getPropMark(propNet.getTerminalProposition(), props);
-		return result;
+		Set<Component> props = getProps(state);
+		return isTerminalProps(props);
+	}
+
+	private boolean isTerminalProps(Set<Component> props) {
+		Proposition t = propNet.getTerminalProposition();
+		return getPropValue(t, props);
+	}
+
+	private int getGoalProps(Role role, Set<Component> props) throws GoalDefinitionException {
+		Set<Proposition> goals = propNet.getGoalPropositions().get(role);
+		int count = 0;
+		Proposition prop = null;
+		//getPropMark(p, props)
+		for(Proposition p : goals){
+			if(getPropValue(p, props)){
+				count++;
+				prop = p;
+			}
+		}
+		if(count == 0){
+			return 0;
+		}
+		if(count == 1){
+			return getGoalValue(prop);
+		}
+		else{
+			MachineState state = getStateFromBase(props, false);
+			throw new GoalDefinitionException(state, role);
+		}
 	}
 
 	/**
@@ -223,28 +294,8 @@ public class AliferousCachedForwardPropNetStateMachine extends StateMachine {
 	@Override
 	public int getGoal(MachineState state, Role role)
 			throws GoalDefinitionException {
-		Set<Component> props = new HashSet<Component>();
-		markBases(state, props);
-		forwardProp(props);
-		Set<Proposition> goals = propNet.getGoalPropositions().get(role);
-		int count = 0;
-		Proposition prop = null;
-		//getPropMark(p, props)
-		for(Proposition p : goals){
-			if(props.contains(p)){
-				count++;
-				prop = p;
-			}
-		}
-		if(count == 0){
-			return 0;
-		}
-		if(count == 1){
-			return getGoalValue(prop);
-		}
-		else{
-			throw new GoalDefinitionException(state, role);
-		}
+		Set<Component> props = getProps(state);
+		return getGoalProps(role, props);
 	}
 
 	/**
@@ -257,7 +308,25 @@ public class AliferousCachedForwardPropNetStateMachine extends StateMachine {
 		Set<Component> props = new HashSet<Component>();
 		props.add(propNet.getInitProposition());
 		forwardProp(props);
-		return getStateFromBase(props);
+		props.remove(propNet.getInitProposition());
+		return getStateFromBase(props, true);
+	}
+
+	private List<Move> getLegalMovesFromProps(Set<Component> props) {
+		List<Move> totalMoves = new ArrayList<Move>();
+		Random random = new Random();
+		for (Role role : roles) {
+			Set<Proposition> legals = propNet.getLegalPropositions().get(role);
+			List<Move> moves = new ArrayList<Move>();
+			for (Proposition prop : legals) {
+				if (getPropValue(prop, props)) {
+					moves.add(getMoveFromProposition(prop));
+				}
+			}
+			totalMoves.add(moves.get(random.nextInt(moves.size())));
+		}
+
+		return totalMoves;
 	}
 
 	/**
@@ -266,13 +335,11 @@ public class AliferousCachedForwardPropNetStateMachine extends StateMachine {
 	@Override
 	public List<Move> getLegalMoves(MachineState state, Role role)
 			throws MoveDefinitionException {
-		Set<Component> props = new HashSet<Component>();
-		markBases(state, props);
-		forwardProp(props);
+		Set<Component> props = getProps(state);
 		Set<Proposition> legals = propNet.getLegalPropositions().get(role);
 		List<Move> moves = new ArrayList<Move>();
 		for (Proposition prop : legals) {
-			if (props.contains(prop)) {
+			if (getPropValue(prop, props)) {
 				moves.add(getMoveFromProposition(prop));
 			}
 		}
@@ -285,11 +352,9 @@ public class AliferousCachedForwardPropNetStateMachine extends StateMachine {
 	@Override
 	public MachineState getNextState(MachineState state, List<Move> moves)
 			throws TransitionDefinitionException {
-		Set<Component> props = new HashSet<Component>();
-		markBases(state, props);
-		markActions(moves, props);
-		forwardProp(props);
-		return getStateFromBase(props);
+		Set<Component> props = getProps(state);
+		updateState(props, moves);
+		return getUpdatedState(props, true);
 	}
 
 	/**
@@ -459,14 +524,126 @@ public class AliferousCachedForwardPropNetStateMachine extends StateMachine {
 		return Integer.parseInt(constant.toString());
 	}
 
-	public MachineState getUpdatedState(int index, List<Move> moves) {
+	/* Instead of returning a state, simply keeps it cached here.
+	 * It returns true if the state is terminal.
+	 */
+
+	public void setIndex(int index, MachineState state) {
+		Set<Component> props = getProps(state);
+		threadSets.set(index, props);
+	}
+
+	public Boolean updateIndexRandomMove(int index) {
 		Set<Component> props = threadSets.get(index);
+		List<Move> moves = getLegalMovesFromProps(props);
+		return updateSetIndexed(index, moves);
+	}
+
+	public Boolean updateSetIndexed(int index, List<Move> moves) {
+		Set<Component> props = threadSets.get(index);
+		MachineState state = getStateFromBase(props, false);
+		updateState(props, moves);
+		Boolean isTerminal = isTerminalProps(props);
+		state = getStateFromBase(props, false);
+		threadSets.set(index, props);
+		return isTerminal;
+	}
+
+	private void updateState(Set<Component> props, List<Move> moves) {
+		Set<Proposition> inputs = new HashSet<Proposition>();
 
 		Map<GdlSentence, Proposition> map = propNet.getInputPropositions();
 		List<GdlSentence> does = toDoes(moves);
 		for (GdlSentence sentence : does) {
-			Proposition p = map.get(sentence);
+			inputs.add(map.get(sentence));
 		}
+
+		Map<Component, Boolean> newValues = new HashMap<Component, Boolean>();
+		Stack<Component> toUpdate = new Stack<Component>();
+		for (Proposition p : map.values()) {
+			if (props.contains(p) != inputs.contains(p)) {
+				newValues.put(p, inputs.contains(p));
+				toUpdate.push(p);
+			}
+		}
+
+		while(!toUpdate.isEmpty()) {
+			Component nextUpdate = toUpdate.pop();
+			Boolean newValue = newValues.get(nextUpdate);
+			if (newValue == props.contains(nextUpdate)) {
+				continue;
+			}
+			if (newValue) {
+				props.add(nextUpdate);
+			}
+			else {
+				props.remove(nextUpdate);
+			}
+			if (nextUpdate instanceof Proposition) {
+				if (((Proposition) nextUpdate).getType() == Proposition.PropType.BASE) {
+					continue;
+				}
+			}
+			for (Component output : nextUpdate.getOutputs()) {
+				if (output instanceof Proposition) {
+					newValues.put(output, newValue);
+					toUpdate.push(output);
+				}
+				else if (output instanceof And) {
+					if (!newValue) {
+						newValues.put(output, newValue);
+						toUpdate.push(output);
+					}
+					else {
+						if (!newValues.containsKey(output)) {
+							newValues.put(output, propMarkConjunction(output, props));
+							toUpdate.push(output);
+						}
+					}
+				}
+				else if (output instanceof Or) {
+					if (newValue) {
+						newValues.put(output, newValue);
+						toUpdate.push(output);
+					}
+					else {
+						if (!newValues.containsKey(output)) {
+							newValues.put(output,  propMarkDisjunction(output, props));
+							toUpdate.push(output);
+						}
+					}
+				}
+				else if (output instanceof Not) {
+					newValues.put(output, !newValue);
+					toUpdate.push(output);
+				}
+				else if (output instanceof Transition) {
+					newValues.put(output,  newValue);
+					toUpdate.push(output);
+				}
+			}
+		}
+	}
+
+	public int getGoalIndexed(int index, Role role) throws GoalDefinitionException {
+		return getGoalProps(role, threadSets.get(index));
+	}
+
+	public MachineState getUpdatedState(Set<Component> props, Boolean toCache) {
+		Set<GdlSentence> contents = new HashSet<GdlSentence>();
+		for (Proposition p : propNet.getBasePropositions().values())
+		{
+			if (props.contains(p))
+			{
+				contents.add(p.getName());
+			}
+
+		}
+		MachineState newState = new MachineState(contents);
+		if (toCache && cache != null) {
+			cache.put(newState, props);
+		}
+		return newState;
 	}
 
 	/**
@@ -487,9 +664,21 @@ public class AliferousCachedForwardPropNetStateMachine extends StateMachine {
 
 		}
 		MachineState newState = new MachineState(contents);
-		if (toCache) {
+		if (toCache && cache != null) {
 			cache.put(newState, props);
 		}
 		return newState;
+	}
+
+	public Boolean removeFromCache(MachineState state) {
+		if (cache.containsKey(state)) {
+			cache.remove(state);
+			return true;
+		}
+		return false;
+	}
+
+	public void clearAllCache() {
+		cache.clear();
 	}
 }
