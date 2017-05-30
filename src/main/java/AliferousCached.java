@@ -89,8 +89,7 @@ public class AliferousCached extends StateMachineGamer {
 	@Override
 	public void stateMachineMetaGame(long timeout)
 			throws TransitionDefinitionException, MoveDefinitionException, GoalDefinitionException {
-		AliferousCachedForwardPropNetStateMachine machine = (AliferousCachedForwardPropNetStateMachine) getStateMachine();
-		machine.initializeCache(NUM_CHARGES);
+		StateMachine machine = getStateMachine();
 		MachineState state = machine.getInitialState();
 		currNode = new Node(state, null, null, true);
 
@@ -263,27 +262,9 @@ public class AliferousCached extends StateMachineGamer {
 	//---------------------------------------------------------------------------------------------
 	//Monte Carlo Search Methods
 	//---------------------------------------------------------------------------------------------
-	private float depthChargeCached(int index) {
-		AliferousCachedForwardPropNetStateMachine machine = (AliferousCachedForwardPropNetStateMachine) getStateMachine();
-		while(true) {
-			Boolean isTerminal = machine.updateIndexRandomMove(index);
-			if (isTerminal) {
-				break;
-			}
-		}
-		try {
-			return machine.getGoalIndexed(index, getRole());
-		} catch (GoalDefinitionException e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
-		}
-		return 0.f;
-	}
-
-	private float depthCharge(MachineState state, long timeout) throws GoalDefinitionException,
+	private float depthCharge(MachineState state, long timeout, Boolean newSet, int index) throws GoalDefinitionException,
 																MoveDefinitionException, TransitionDefinitionException {
-
-		StateMachine machine = getStateMachine();
+		AliferousCachedForwardPropNetStateMachine machine = (AliferousCachedForwardPropNetStateMachine) getStateMachine();
 		if (machine.isTerminal(state)) {
 			return machine.getGoal(state, getRole());
 		}
@@ -291,8 +272,8 @@ public class AliferousCached extends StateMachineGamer {
 			return 0;
 		}
 		List<Move> moves = machine.getRandomJointMove(state);
-		MachineState nextState = machine.getNextState(state, moves);
-		return depthCharge(nextState, timeout);
+		MachineState nextState = machine.updateThreadCache(state, moves, index, newSet);
+		return depthCharge(nextState, timeout, false, index);
 	}
 
 	private float selectionScore(Node node, Node parentNode) {
@@ -395,10 +376,6 @@ public class AliferousCached extends StateMachineGamer {
 	}
 
 	private float simulate(Node node, long timeout) throws GoalDefinitionException, MoveDefinitionException, TransitionDefinitionException {
-		final AliferousCachedForwardPropNetStateMachine machine = (AliferousCachedForwardPropNetStateMachine) getStateMachine();
-		if (machine.isTerminal(node.getState())) {
-			return machine.getGoal(node.getState(), getRole());
-		}
 		float total = 0;
 		final float[] results = new float[NUM_CHARGES];
 		final Node currNode = node;
@@ -410,8 +387,11 @@ public class AliferousCached extends StateMachineGamer {
 				int x = index;
 				@Override
 				public void run() {
-					machine.setIndex(x, currNode.getState());
-					results[x] = depthChargeCached(x);
+					try {
+						results[x] = depthCharge(currNode.getState(), time, true, x);
+					} catch (GoalDefinitionException | MoveDefinitionException | TransitionDefinitionException e) {
+						e.printStackTrace();
+					}
 				}
 
 			});
@@ -456,7 +436,7 @@ public class AliferousCached extends StateMachineGamer {
 			return 0;
 		}
 		for (int i = 0; i < NUM_CHARGES; i++) {
-			total += depthCharge(state, timeout);
+			total += depthCharge(state, timeout, false, 0);
 		}
 		return total / NUM_CHARGES;
 	}
@@ -711,12 +691,10 @@ public class AliferousCached extends StateMachineGamer {
 		AliferousCachedForwardPropNetStateMachine machine = (AliferousCachedForwardPropNetStateMachine) getStateMachine();
 		//if there was no previous state, create one
 		if (currNode == null) {
-			machine.clearAllCache();
 			System.out.println("No curr node");
 			currNode = new Node(getCurrentState(), null, null, true);
 		}
 		else {
-			machine.removeFromCache(currNode.getState());
 			Boolean foundNode = false;
 			//If it's single player then each state is the child of the previous state as there are no opponent moves
 			if (singlePlayer) {
@@ -725,11 +703,12 @@ public class AliferousCached extends StateMachineGamer {
 						currNode = childNode;
 						foundNode = true;
 					}
-					machine.removeFromCache(childNode.getState());
+					else {
+						machine.removeFromCache(currNode.getState());
+					}
 				}
 				if (!foundNode) {
 					System.out.println("currnode, but couldn't find state single player");
-					machine.clearAllCache();
 					currNode = new Node(getCurrentState(), null, null, true);
 				}
 			}
@@ -741,17 +720,21 @@ public class AliferousCached extends StateMachineGamer {
 							currNode = grandChildNode;
 							foundNode = true;
 						}
-						machine.removeFromCache(childNode.getState());
+						else {
+							machine.removeFromCache(currNode.getState());
+						}
 					}
 				}
 				if (!foundNode) {
 					System.out.println("currnode, but couldn't find state, multi");
-					machine.clearAllCache();
 					currNode = new Node(getCurrentState(), null, null, true);
 				}
 			}
 		}
 		//To stop backpropagation at a reasonable point, set the parent to null
+		if (currNode.getParent() != null) {
+			machine.removeFromCache(currNode.getParent().getState());
+		}
 		currNode.setParent(null);
 		monteCarlo(timeout);
 	}
@@ -796,7 +779,7 @@ public class AliferousCached extends StateMachineGamer {
 
 		}
 		System.out.println("\nTime taken in milliseconds: " + timeTaken);
-		System.out.println("Average backprop-threaded charges per second: " + averageCharges);
+		System.out.println("Average diffprop-threaded charges per second: " + averageCharges);
 		findNode = true;
 
 		//Only find the best move if there is more than 1 choice
@@ -851,7 +834,7 @@ public class AliferousCached extends StateMachineGamer {
 
 	@Override
 	public String getName() {
-		return "Aliferous-Cached";
+		return "Aliferous-DiffProp";
 	}
 
 

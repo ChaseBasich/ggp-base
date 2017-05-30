@@ -59,18 +59,6 @@ public class AliferousPropNetStateMachine extends StateMachine {
 		}
 	}
 
-	private void clearPropNet(Map<Proposition, Boolean> bases) {
-		Map<GdlSentence, Proposition> map = propNet.getBasePropositions();
-		for (Proposition p : map.values()) {
-			bases.put(p, false);
-		}
-		map = propNet.getInputPropositions();
-		for (Proposition p : map.values()) {
-			p.setValue(false);
-		}
-		propNet.getInitProposition().setValue(false);
-	}
-
 	private Boolean propMarkNegation(Component c, Set<Proposition> props){
 		return !getPropMark(c.getSingleInput(), props);
 	}
