@@ -39,6 +39,9 @@ public class AliferousBackPropNetPlayer extends StateMachineGamer {
 	//Is it a single player game?
 	private Boolean singlePlayer;
 
+	//Whether we should use heuristics or MCTS
+	private Boolean useHeuristics = false;
+
 	//Keeps track of the node corresponding to the current state
 	private Node currNode;
 	//Whether or not currNode needs to be found. This should only be false if we just exited metagame
@@ -98,10 +101,22 @@ public class AliferousBackPropNetPlayer extends StateMachineGamer {
 			singlePlayer = true;
 		}
 
-		//Call montecarlo until we're out of search time
-		while(!searchTime(timeout)) {
-			monteCarlo(timeout);
+		long startTime = System.currentTimeMillis();
+		machine.getNextState(state, machine.getRandomJointMove(state));
+		long totalTime = System.currentTimeMillis() - startTime;
+
+
+		if(totalTime > 100) {
+			useHeuristics = true;
 		}
+		else {
+			//Call monteCarlo until we're out of search time
+			while(!searchTime(timeout)) {
+				monteCarlo(timeout);
+			}
+			findNode = false;
+		}
+
 		findNode = false;
 		//Node.printTree(currNode);
 	}
@@ -254,9 +269,110 @@ public class AliferousBackPropNetPlayer extends StateMachineGamer {
 	}
 
 
+	private int maxHeuristicScore(MachineState state, int alpha, int beta, int level, int max_level, long timeout) throws TransitionDefinitionException,
+	MoveDefinitionException, GoalDefinitionException{
 
+		StateMachine machine = getStateMachine();
+		Role myRole = getRole();
+		if(machine.isTerminal(state)) {
+			return machine.getGoal(state, myRole);
+		}
 
+		if (outOfTime(timeout)) {
+			doneSearching = false;
+			return alpha;//TODO: discuss doing heuristic
+		}
+		if (level > max_level || searchTime(timeout)) {
+			doneSearching = false;
+			return (int)heuristicEval(state);
+		}
 
+		List<Move> myMoves = machine.getLegalMoves(state, myRole);
+
+		Map<Role, Integer> roleMap = machine.getRoleIndices();
+
+		for(Move move: myMoves) {
+			totalMoves.get(roleMap.get(myRole)).add(move);
+			alpha = Math.max(minHeuristicScore(state, move, alpha, beta, level, max_level, timeout), alpha);
+			if (alpha >= beta) {
+				return beta;
+			}
+		}
+	return alpha;
+	}
+
+	private int minHeuristicScore(MachineState state, Move myMove, int alpha, int beta, int level, int max_level, long timeout) throws TransitionDefinitionException,
+		MoveDefinitionException, GoalDefinitionException{
+
+		StateMachine machine = getStateMachine();
+
+		List< List<Move> > jointMoves = machine.getLegalJointMoves(state, getRole(), myMove);
+
+		if (outOfTime(timeout)) {
+			doneSearching = false;
+			return alpha; //discuss doing heuristic
+		}
+		if (searchTime(timeout)) {
+			return (int)heuristicEval(state);
+		}
+
+		Map<Role, Integer> roleMap = machine.getRoleIndices();
+		List<Role> roles = machine.getRoles();
+		for (int i = 0; i < roles.size(); i++) {
+			if (roles.get(i).equals(getRole())) continue;
+			List<Move> moves = machine.getLegalMoves(state, roles.get(i));
+			for (Move move : moves) {
+				totalMoves.get(i).add(move);
+			}
+		}
+
+		for(List<Move> moves : jointMoves) {
+			MachineState nextState = machine.getNextState(state, moves);
+
+			beta = Math.min(maxHeuristicScore(nextState, alpha, beta, level + 1, max_level, timeout), beta);
+			if (beta <= alpha) {
+				return alpha;
+			}
+		}
+		return beta;
+		}
+
+	private Move bestHeuristicScore(long timeout) throws TransitionDefinitionException,
+	MoveDefinitionException, GoalDefinitionException{
+
+			MachineState state = getCurrentState();
+			StateMachine machine = getStateMachine();
+			Role myRole = getRole();
+
+			List<Move> myMoves = machine.getLegalMoves(state, myRole);
+
+			int maxScore = 0;
+			long startTime = System.nanoTime();
+			Move bestMove = myMoves.get(random.nextInt(myMoves.size()));
+			int max_depth = 1;
+			doneSearching = true;
+
+			Map<Role, Integer> roleMap = machine.getRoleIndices();
+			//todo: also, if it finds something before time runs out
+			maxScore = 0;
+			while (timeout - System.currentTimeMillis() > BUF_TIME) {
+				for(Move move: myMoves) {
+					int score = minHeuristicScore(state, move, 0, 100, 0, max_depth, timeout);
+					if (score == 100) {
+						return move;
+					}
+					if (score > maxScore) {
+						maxScore = score;
+						bestMove = move;
+					}
+				}
+				if (doneSearching) break;
+				max_depth++;
+				doneSearching = true;
+			}
+
+			return bestMove;
+	}
 
 
 	//---------------------------------------------------------------------------------------------
@@ -748,6 +864,10 @@ public class AliferousBackPropNetPlayer extends StateMachineGamer {
 				totalMoves.add(new HashSet<Move> ());
 			}
 			init = true;
+		}
+
+		if(useHeuristics) {
+			return bestHeuristicScore(timeout);
 		}
 
 		List<Move> moves = machine.getLegalMoves(getCurrentState(), getRole());
