@@ -39,6 +39,8 @@ public class AliferousCachedForwardPropNetStateMachine extends StateMachine {
 	private PropNet propNet;
 	/** The topological ordering of the propositions */
 	private List<Component> ordering;
+	/** The ordering, but placed in an array for faster access*/
+	private Component[] orderingArray;
 	/** The player roles */
 	private List<Role> roles;
 
@@ -74,7 +76,7 @@ public class AliferousCachedForwardPropNetStateMachine extends StateMachine {
 	}
 
 	private Boolean propMarkConjunction(Component c, Set<Component> props){
-		for ( Component component : c.getInputs() )
+		for ( Component component : c.getInputArray() )
 		{
 			if (!props.contains(component))
 			{
@@ -85,7 +87,7 @@ public class AliferousCachedForwardPropNetStateMachine extends StateMachine {
 	}
 
 	private Boolean propMarkDisjunction(Component c, Set<Component> props){
-		for ( Component component : c.getInputs() )
+		for ( Component component : c.getInputArray() )
 		{
 			if (props.contains(component) )
 			{
@@ -105,7 +107,7 @@ public class AliferousCachedForwardPropNetStateMachine extends StateMachine {
 	}
 
 	private Boolean propValueConjunction(Component c, Set<Component> props){
-		for ( Component component : c.getInputs() )
+		for ( Component component : c.getInputArray() )
 		{
 			if (!getPropValue(component, props))
 			{
@@ -116,7 +118,7 @@ public class AliferousCachedForwardPropNetStateMachine extends StateMachine {
 	}
 
 	private Boolean propValueDisjunction(Component c, Set<Component> props){
-		for ( Component component : c.getInputs() )
+		for ( Component component : c.getInputArray() )
 		{
 			if (getPropValue(component, props))
 			{
@@ -180,7 +182,7 @@ public class AliferousCachedForwardPropNetStateMachine extends StateMachine {
 	}
 
 	private void forwardProp(Set<Component> props){
-		for(Component p : ordering){
+		for(Component p : orderingArray){
 			Boolean addProp = false;
 			if(p instanceof Proposition){
 				addProp = props.contains(p.getSingleInput());
@@ -209,6 +211,25 @@ public class AliferousCachedForwardPropNetStateMachine extends StateMachine {
 	}
 
 	/**
+	 * Crystallizes all components in the propnet. This means the default java
+	 * collection is transfered to an array and inputs and outputs can no longer be modified
+	 */
+	private void crystallize() {
+		for (Component c : propNet.getComponents()) {
+			c.crystallize();
+		}
+	}
+
+	private void crystallizeOrdering() {
+		orderingArray = new Component[ordering.size()];
+		int i = 0;
+		for (Component c : ordering) {
+			orderingArray[i] = c;
+			i++;
+		}
+	}
+
+	/**
 	 * Initializes the PropNetStateMachine. You should compute the topological
 	 * ordering here. Additionally you may compute the initial state here, at
 	 * your discretion.
@@ -226,6 +247,7 @@ public class AliferousCachedForwardPropNetStateMachine extends StateMachine {
 			propNet = OptimizingPropNetFactory.create(description);
 			roles = propNet.getRoles();
 			setTypes();
+			crystallize(); //freezes the propnet, no more changing components
 			ordering = getOrdering();
 			if (verifySort()) {
 				System.out.println("good order");
@@ -348,21 +370,29 @@ public class AliferousCachedForwardPropNetStateMachine extends StateMachine {
 		for (Component input : propNet.getInputPropositions().values()) {
 			if (props.contains(input) && !prevProps.contains(input)) {
 				newProps.add(input);
-				toUpdate.addAll(input.getOutputs());
+				for (Component o : input.getOutputArray()) {
+					toUpdate.add(o);
+				}
 			}
 			else if (!props.contains(input) && prevProps.contains(input)) {
 				newProps.remove(input);
-				toUpdate.addAll(input.getOutputs());
+				for (Component o : input.getOutputArray()) {
+					toUpdate.add(o);
+				}
 			}
 		}
 
 		for (Component base : propNet.getBasePropositions().values()) {
 			if (props.contains(base) && !prevProps.contains(base)) {
-				toUpdate.addAll(base.getOutputs());
+				for (Component o : base.getOutputArray()) {
+					toUpdate.add(o);
+				}
 				newProps.add(base);
 			}
 			else if (!props.contains(base) && prevProps.contains(base)) {
-				toUpdate.addAll(base.getOutputs());
+				for (Component o : base.getOutputArray()) {
+					toUpdate.add(o);
+				}
 				newProps.remove(base);
 			}
 		}
@@ -393,11 +423,15 @@ public class AliferousCachedForwardPropNetStateMachine extends StateMachine {
 
 			if (newValue && !newProps.contains(c)) {
 				newProps.add(c);
-				toUpdate.addAll(c.getOutputs());
+				for (Component o : c.getOutputArray()) {
+					toUpdate.add(o);
+				}
 			}
 			else if (!newValue && newProps.contains(c)) {
 				newProps.remove(c);
-				toUpdate.addAll(c.getOutputs());
+				for (Component o : c.getOutputArray()) {
+					toUpdate.add(o);
+				}
 			}
 		}
 		return newProps;
@@ -432,7 +466,7 @@ public class AliferousCachedForwardPropNetStateMachine extends StateMachine {
 		toExplore.add(goal);
 		while(!toExplore.isEmpty()) {
 			Component c = toExplore.poll();
-			for (Component input : c.getInputs()) {
+			for (Component input : c.getInputArray()) {
 				if (seen.contains(input)) {
 					continue;
 				}
@@ -460,12 +494,12 @@ public class AliferousCachedForwardPropNetStateMachine extends StateMachine {
 			}
 			Component goalInput = goal.getSingleInput();
 			if (goalInput instanceof Or) {
-				for (Component c : goalInput.getInputs()) {
+				for (Component c : goalInput.getInputArray()) {
 					Proposition newGoal = new Proposition(goal.getName());
 					newGoal.addInput(c);
 					c.removeOutput(goalInput);
 					c.addOutput(newGoal);
-					for(Component output : goal.getOutputs()) {
+					for(Component output : goal.getOutputArray()) {
 						newGoal.addOutput(output);
 					}
 					newGoals.add(newGoal);
@@ -573,7 +607,7 @@ public class AliferousCachedForwardPropNetStateMachine extends StateMachine {
 		}
 		tempVisited.add(c);
 
-		for (Component output : c.getOutputs())
+		for (Component output : c.getOutputArray())
 		{
 			topologicalSortUtil(output, visited, stack, tempVisited);
 		}
@@ -583,7 +617,7 @@ public class AliferousCachedForwardPropNetStateMachine extends StateMachine {
 	}
 
 	public void getInputProps(Component c, Set<Component> comps) {
-		for (Component input : c.getInputs()) {
+		for (Component input : c.getInputArray()) {
 			if (input instanceof Proposition) {
 				comps.add(input);
 			}
@@ -597,7 +631,7 @@ public class AliferousCachedForwardPropNetStateMachine extends StateMachine {
 		Set<Component> seenComponents = new HashSet<Component>();
 		for (Component c : ordering) {
 			seenComponents.add(c);
-			for (Component input : c.getInputs()) {
+			for (Component input : c.getInputArray()) {
 				if (input instanceof Proposition) {
 					Proposition p = (Proposition) input;
 					if (p.getType() != Proposition.PropType.VIEW) {
@@ -609,6 +643,7 @@ public class AliferousCachedForwardPropNetStateMachine extends StateMachine {
 				}
 			}
 		}
+		crystallizeOrdering();
 		return true;
 	}
 

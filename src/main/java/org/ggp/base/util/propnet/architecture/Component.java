@@ -19,6 +19,14 @@ public abstract class Component implements Serializable
     /** The outputs of the component. */
     private final Set<Component> outputs;
 
+
+    //Arrays for faster traversal
+    private Component inputArray[];
+
+    private Component outputArray[];
+
+    private Boolean crystallized;
+
     /**
      * Creates a new Component with no inputs or outputs.
      */
@@ -26,6 +34,7 @@ public abstract class Component implements Serializable
     {
         this.inputs = new HashSet<Component>();
         this.outputs = new HashSet<Component>();
+        crystallized = false;
     }
 
     /**
@@ -33,29 +42,50 @@ public abstract class Component implements Serializable
      *
      * @param input
      *            A new input.
+     * @throws CrystallizedComponentException
      */
     public void addInput(Component input)
     {
+    	if (crystallized) {
+    		System.out.println("Component already crystallized, not adding input");
+    		return;
+    	}
         inputs.add(input);
     }
 
     public void removeInput(Component input)
     {
+    	if (crystallized) {
+    		System.out.println("Component already crystallized, not removing input");
+    		return;
+    	}
     	inputs.remove(input);
     }
 
     public void removeOutput(Component output)
     {
+    	if (crystallized) {
+    		System.out.println("Component already crystallized, not removing output");
+    		return;
+    	}
     	outputs.remove(output);
     }
 
     public void removeAllInputs()
     {
+    	if (crystallized) {
+    		System.out.println("Component already crystallized, not removing inputs");
+    		return;
+    	}
 		inputs.clear();
 	}
 
 	public void removeAllOutputs()
 	{
+		if (crystallized) {
+    		System.out.println("Component already crystallized, not removing outputs");
+    		return;
+    	}
 		outputs.clear();
 	}
 
@@ -67,6 +97,10 @@ public abstract class Component implements Serializable
      */
     public void addOutput(Component output)
     {
+    	if (crystallized) {
+    		System.out.println("Component already crystallized, not adding output");
+    		return;
+    	}
         outputs.add(output);
     }
 
@@ -89,6 +123,9 @@ public abstract class Component implements Serializable
      */
     public Component getSingleInput() {
         assert inputs.size() == 1;
+        if (crystallized) {
+        	return inputArray[0];
+        }
         return inputs.iterator().next();
     }
 
@@ -111,6 +148,9 @@ public abstract class Component implements Serializable
      */
     public Component getSingleOutput() {
         assert outputs.size() == 1;
+        if (crystallized) {
+        	return outputArray[0];
+        }
         return outputs.iterator().next();
     }
 
@@ -151,6 +191,30 @@ public abstract class Component implements Serializable
         }
 
         return sb.toString();
+    }
+
+    public void crystallize() {
+    	crystallized = true;
+    	inputArray = new Component[inputs.size()];
+    	outputArray = new Component[outputs.size()];
+    	int i = 0;
+    	for (Component c : inputs) {
+    		inputArray[i] = c;
+    		i++;
+    	}
+    	i = 0;
+    	for (Component c : outputs) {
+    		outputArray[i] = c;
+    		i++;
+    	}
+    }
+
+    public Component[] getInputArray() {
+    	return inputArray;
+    }
+
+    public Component[] getOutputArray() {
+    	return outputArray;
     }
 
 }
