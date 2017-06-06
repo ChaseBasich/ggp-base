@@ -13,56 +13,115 @@ import org.ggp.base.util.statemachine.MachineState;
 import org.ggp.base.util.statemachine.Move;
 import org.ggp.base.util.statemachine.Role;
 import org.ggp.base.util.statemachine.StateMachine;
-import org.ggp.base.util.statemachine.cache.CachedStateMachine;
 import org.ggp.base.util.statemachine.exceptions.GoalDefinitionException;
 import org.ggp.base.util.statemachine.exceptions.MoveDefinitionException;
 import org.ggp.base.util.statemachine.exceptions.TransitionDefinitionException;
-import org.ggp.base.util.statemachine.implementation.prover.ProverStateMachine;
+import org.ggp.base.util.statemachine.implementation.propnet.AliferousCachedBitSetStateMachine;
 
 
 public class AliferousExperimental extends StateMachineGamer {
 
-	private static final long MIN_TIME = 3000;
-	private static final long SEARCH_TIME = 0;
-	private static final long BUF_TIME = 1500;
-	private static final int NUM_CHARGES = 4;
+	//Constants - Adjust these to change how the AI structures its time
 
+	//Don't schedule any more new activities (monte carlo, etc) in the final MIN_TIME milliseconds
+	private static final long MIN_TIME = 3500;
+
+	//Stops whatever it's doing if time gets down to BUF_TIME milliseconds
+	private static final long BUF_TIME = 2500;
+
+	//Number of depth charges per state; we can make this dynamic
+	private static final int NUM_CHARGES = 8;
+
+	//Used for heuristics
 	private int maxScoreFound;
 	private int totalScores;
 
+	//Is it a single player game?
+	private Boolean singlePlayer;
+
+	//Keeps track of the node corresponding to the current state
+	private Node currNode;
+	//Whether or not currNode needs to be found. This should only be false if we just exited metagame
+	private Boolean findNode;
+
+	//Did we reach terminal states in our search? TODO: make this work for monte carlo, I don't think it does yet
 	private Boolean doneSearching;
+
+	//Has it been initialized yet? Some things have to be initialized during the first turn of the game
 	private Boolean init = false;
+
+	//To avoid re-initializing this each time we make it a private variable. TODO: check thread safety
+	private Random random;
+
+	//Keeps track of moves and states seen so far, used for heuristics
 	private ArrayList< HashSet<Move> > totalMoves;
 	private HashSet<MachineState> totalStates;
 	private ArrayList<MachineState> terminalStates;
 	private HashSet<MachineState> terminalStatesSeen;
 	private MachineState savedState;
 
+	/*During getInitialStateMachine() we initialize all the global data*/
 	@Override
 	public StateMachine getInitialStateMachine() {
 		totalMoves = new ArrayList< HashSet<Move> >();
 		totalStates = new HashSet<MachineState>();
 		terminalStates = new ArrayList<MachineState>();
 		terminalStatesSeen = new HashSet<MachineState>();
+
+
+		random = new Random();
 		savedState = null;
+		findNode = true;
 		maxScoreFound = 0;
 		totalScores = 0;
-		StateMachine machine = new CachedStateMachine(new ProverStateMachine());
+		singlePlayer = false;
+		StateMachine machine = new AliferousCachedBitSetStateMachine();
 		return machine;
 	}
 
+	/*
+	 * (non-Javadoc)
+	 * @see org.ggp.base.player.gamer.statemachine.StateMachineGamer#stateMachineMetaGame(long)
+	 * Called at the beginning of the metagame. We can use this time to try to figure out information
+	 * about the game itself. Currently we determine whether or not it's a single player game and
+	 * start expanding the monte carlo tree
+	 */
 	@Override
 	public void stateMachineMetaGame(long timeout)
 			throws TransitionDefinitionException, MoveDefinitionException, GoalDefinitionException {
+		StateMachine machine = getStateMachine();
+		MachineState state = machine.getInitialState();
+		currNode = new Node(state, null, null, true);
+
+
+		if (machine.getRoles().size() == 1) {
+			singlePlayer = true;
+		}
+
+		//Call montecarlo until we're out of search time
+		while(!searchTime(timeout)) {
+			monteCarlo(timeout);
+		}
+		findNode = false;
 	}
 
+	/*
+	 * Helper function to determine whether or not we should stop searching
+	 */
 	private Boolean searchTime (long timeout) {
 		return timeout - System.currentTimeMillis() <= MIN_TIME;
 	}
 
+	/*
+	 * Helper function to determine whether or not we need to return immediately
+	 */
 	private Boolean outOfTime(long timeout) {
 		return timeout - System.currentTimeMillis() <= BUF_TIME;
 	}
+
+	//---------------------------------------------------------------------------------------------
+	//Heuristic Eval Methods
+	//---------------------------------------------------------------------------------------------
 
 	private void findTerminalStates(MachineState state, long startTime, long searchTime) throws MoveDefinitionException,
 																		TransitionDefinitionException, GoalDefinitionException {
@@ -71,8 +130,6 @@ public class AliferousExperimental extends StateMachineGamer {
 		if (savedState != null) {
 			useState = savedState;
 		}
-
-		Random random = new Random();
 
 		while (!machine.isTerminal(useState)) {
 			if(System.currentTimeMillis() - startTime > searchTime) {
@@ -195,38 +252,282 @@ public class AliferousExperimental extends StateMachineGamer {
 		return (int) score;
 	}
 
-	private int depthCharge(MachineState state, long timeout) throws GoalDefinitionException,
+
+
+
+
+
+
+	//---------------------------------------------------------------------------------------------
+	//Monte Carlo Search Methods
+	//---------------------------------------------------------------------------------------------
+	private float depthCharge(MachineState state, long timeout, Boolean newSet, int index) throws GoalDefinitionException,
 																MoveDefinitionException, TransitionDefinitionException {
-		StateMachine machine = getStateMachine();
+		AliferousCachedBitSetStateMachine machine = (AliferousCachedBitSetStateMachine) getStateMachine();
 		if (machine.isTerminal(state)) {
 			return machine.getGoal(state, getRole());
 		}
-		if (outOfTime(timeout)) {
-			return 0;
-		}
+		//if (outOfTime(timeout)) {
+		//	return 0;
+		//}
 		List<Move> moves = machine.getRandomJointMove(state);
-		MachineState nextState = machine.getNextState(state, moves);
-		return depthCharge(nextState, timeout);
+		MachineState nextState = machine.updateThreadCache(state, moves, index, newSet);
+		return depthCharge(nextState, timeout, false, index);
 	}
 
-	private int monteCarlo(MachineState state, int numCharges, long timeout) throws MoveDefinitionException,
+	private float selectionScore(Node node, Node parentNode) {
+		float score = node.getScore();
+
+		score += Math.sqrt(1000*log2(parentNode.getNumVisits())/node.getNumVisits());
+		return score;
+	}
+
+	private Node select(Node node, long timeout) throws MoveDefinitionException,
+														GoalDefinitionException, TransitionDefinitionException {
+		if (node.getNumVisits() == 0 || node.getChildren().size() == 0) {
+			return node;
+		}
+
+		ArrayList<Node> childNodes = node.getChildren();
+		for (Node childNode : childNodes) {
+			if (childNode.getNumVisits() == 0) {
+				return childNode;
+			}
+		}
+
+		float maxScore = 0;
+		float childMax = 0;
+		float childMin = 100;
+		Boolean allTerminal = true;
+		Node bestNode = childNodes.get(random.nextInt(childNodes.size()));
+
+		for (Node childNode : childNodes) {
+			float newScore = selectionScore(childNode, node);
+			if (newScore > maxScore && !(childNode.isTerminal() || childNode.canSeeTerminal())) {
+				maxScore = newScore;
+				bestNode = childNode;
+			}
+			if (allTerminal) {
+				if (childNode.isTerminal() || childNode.canSeeTerminal()) {
+					childMax = Math.max(childMax, childNode.getMax());
+					childMin = Math.min(childMin, childNode.getMin());
+				}
+				else {
+					allTerminal = false;
+				}
+			}
+		}
+		if (allTerminal) {
+			if (node.isMaxNode()) {
+				node.setMax(childMax);
+				node.setMin(childMax);
+			}
+			else {
+				node.setMax(childMin);
+				node.setMin(childMin);
+			}
+			return node;
+		}
+		return select(bestNode, timeout);
+	}
+
+	private void expand(Node node) throws MoveDefinitionException, TransitionDefinitionException, GoalDefinitionException {
+
+		StateMachine machine = getStateMachine();
+		MachineState state = node.getState();
+
+		if (machine.isTerminal(state)) {
+			node.setTerminal();
+			float score = machine.getGoal(state, getRole());
+			node.setMax(score);
+			node.setMin(score);
+			return;
+		}
+		if (node.getNumVisits() != 0) {
+			return;
+		}
+		//branch for max node vs min node
+		if (node.isMaxNode()) {
+			for (Move move : machine.getLegalMoves(node.getState(), getRole())) {
+				Node childNode;
+				MachineState childState = node.getState();
+				if (singlePlayer) {
+					List<Move> moves = new ArrayList<Move>();
+					moves.add(move);
+					childState = machine.getNextState(node.getState(), moves);
+				}
+				childNode = new Node(childState, node, move, singlePlayer); //if singlePlayer, it stays max nodes
+				node.addChild(childNode);
+			}
+		}
+		else {
+			List< List<Move> > jointMoves = machine.getLegalJointMoves(state, getRole(), node.getMove());
+
+			HashSet<MachineState> childStates = new HashSet<MachineState>();
+
+			for (List<Move> jointMove : jointMoves) {
+				MachineState nextState = machine.getNextState(state, jointMove);
+				if (childStates.contains(nextState)){
+					continue;
+				}
+
+				childStates.add(nextState);
+
+				Node childNode;
+				childNode = new Node(nextState, node, node.getMove(), true);
+				node.addChild(childNode);
+			}
+		}
+	}
+
+	private float simulate(Node node, long timeout) throws GoalDefinitionException, MoveDefinitionException, TransitionDefinitionException {
+		float total = 0;
+		final float[] results = new float[NUM_CHARGES];
+		final Node currNode = node;
+		final long time = timeout;
+		ArrayList<Thread> threads = new ArrayList<Thread>();
+		for (int i = 0; i < NUM_CHARGES; i++) {
+			final int index = i;
+			threads.add(new Thread() {
+				int x = index;
+				@Override
+				public void run() {
+					try {
+						results[x] = depthCharge(currNode.getState(), time, true, x);
+					} catch (GoalDefinitionException | MoveDefinitionException | TransitionDefinitionException e) {
+						e.printStackTrace();
+					}
+				}
+
+			});
+			threads.get(i).start();
+		}
+
+		for (int i = 0; i < NUM_CHARGES; i++) {
+			try {
+				threads.get(i).join();
+				total += results[i];
+			} catch (InterruptedException e) {
+				e.printStackTrace();
+			}
+		}
+		return total / NUM_CHARGES;
+	}
+
+	private void backpropagate(Node node, float score) {
+		node.addScore(score);
+		if (node.getParent() != null){
+			backpropagate(node.getParent(), score);
+		}
+	}
+
+
+	private void monteCarlo(long timeout) throws MoveDefinitionException,
 																GoalDefinitionException, TransitionDefinitionException {
+		if (outOfTime(timeout)) {
+			return;
+		}
+
+		Node selected = select(currNode, timeout);
+		expand(selected);
+		float score = simulate(selected, timeout);
+		backpropagate(selected, score);
+	}
+
+	private int monteCarloSearch(MachineState state, long timeout) throws GoalDefinitionException,
+																	MoveDefinitionException, TransitionDefinitionException {
 		int total = 0;
 		if (outOfTime(timeout)) {
 			return 0;
 		}
-		for (int i = 0; i < numCharges; i++) {
-			total += depthCharge(state, timeout);
+		for (int i = 0; i < NUM_CHARGES; i++) {
+			total += depthCharge(state, timeout, false, 0);
 		}
-		return total / numCharges;
+		return total / NUM_CHARGES;
 	}
+
+
+	//--------------------------------------------------------------------------------------------
+	//montecarlo minimax
+	//--------------------------------------------------------------------------------------------
+
+	/*
+	 * Similar to the non-monte carlo minimax, used to search the tree. In this case it searches the tree of nodes
+	 * we are constructing. Because this represents our move we always take the maximum score of all the choices.
+	 * If it's a single player game it continues calling this recursively. If it's a multiplayer game it calls minScore
+	 * next to see which opponent move would minimize our score.
+	 */
+	private int monteCarloMaxScore(Node node, int alpha, int beta, int level, int max_level, long timeout) throws TransitionDefinitionException,
+						MoveDefinitionException, GoalDefinitionException{
+
+		StateMachine machine = getStateMachine();
+		Role myRole = getRole();
+
+		//Because we are searching the node tree, get the state associated with that node
+		MachineState state = node.getState();
+		if (machine.isTerminal(state)) {
+			int result = machine.getGoal(state, myRole);
+			return result;
+		}
+		if (node.canSeeTerminal()) {
+			System.out.println("Can see terminal max score of " + node.getMax());
+			return (int) node.getMax();
+		}
+		//If we are at the end of our current search just return the score associated with this child
+		if (level > max_level || searchTime(timeout) || node.getChildren().size() == 0) {
+			doneSearching = node.getChildren().size() == 0;
+			return (int) node.getScore();
+		}
+
+		//Continue searching through all the child nodes
+		for(Node childNode: node.getChildren()) {
+			if (singlePlayer) {
+				alpha = Math.max(monteCarloMaxScore(childNode, alpha, beta, level + 1, max_level, timeout), alpha);
+			}
+			alpha = Math.max(monteCarloMinScore(childNode, alpha, beta, level, max_level, timeout), alpha);
+			if (alpha >= beta) {
+				return beta;
+			}
+		}
+		return alpha;
+	}
+
+
+	/*
+	 * Similar to max score in that it continues searching the tree. Assumes the opponents always take the move that minimizes our player
+	 */
+	private int monteCarloMinScore(Node node, int alpha, int beta, int level, int max_level, long timeout) throws TransitionDefinitionException,
+			MoveDefinitionException, GoalDefinitionException{
+		StateMachine machine = getStateMachine();
+
+		if (node.canSeeTerminal()) {
+			return (int) node.getMin();
+		}
+
+		if (searchTime(timeout) || node.getChildren().size() == 0) {
+			return (int)node.getScore();
+		}
+
+		for(Node childNode : node.getChildren()) {
+			beta = Math.min(monteCarloMaxScore(childNode, alpha, beta, level + 1, max_level, timeout), beta);
+			if (beta <= alpha) {
+				return alpha;
+			}
+		}
+		return beta;
+	}
+
+
+
+	//---------------------------------------------------------------------------------------------
+	//Minimax Methods
+	//---------------------------------------------------------------------------------------------
 
 	private int maxScore(MachineState state, int alpha, int beta, int level, int max_level, long timeout) throws TransitionDefinitionException,
 															MoveDefinitionException, GoalDefinitionException{
 
 		StateMachine machine = getStateMachine();
 		Role myRole = getRole();
-		totalStates.add(state);
 		if(machine.isTerminal(state)) {
 			return machine.getGoal(state, myRole);
 		}
@@ -237,11 +538,7 @@ public class AliferousExperimental extends StateMachineGamer {
 		}
 		if (level > max_level || searchTime(timeout)) {
 			doneSearching = false;
-			alpha = monteCarlo(state, NUM_CHARGES, timeout);
-			if (alpha >= beta) {
-				return beta;
-			}
-			return alpha;
+			return (int)monteCarloSearch(state, timeout);
 		}
 
 		List<Move> myMoves = machine.getLegalMoves(state, myRole);
@@ -272,14 +569,7 @@ public class AliferousExperimental extends StateMachineGamer {
 			return alpha; //discuss doing heuristic
 		}
 		if (searchTime(timeout)) {
-			doneSearching = false;
-			//int score = heuristicEval(state);
-			beta = Math.min(monteCarlo(state, NUM_CHARGES, timeout), beta);
-			if (beta <= alpha) {
-				return beta;
-			}
-			return alpha;
-
+			return (int)monteCarloSearch(state, timeout);
 		}
 
 		Map<Role, Integer> roleMap = machine.getRoleIndices();
@@ -305,8 +595,6 @@ public class AliferousExperimental extends StateMachineGamer {
 		return beta;
 	}
 
-
-	//only for 2-player games
 	private Move bestScore(long timeout) throws TransitionDefinitionException,
 									MoveDefinitionException, GoalDefinitionException{
 
@@ -315,8 +603,6 @@ public class AliferousExperimental extends StateMachineGamer {
 		Role myRole = getRole();
 
 		List<Move> myMoves = machine.getLegalMoves(state, myRole);
-
-		Random random = new Random();
 
 		int maxScore = 0;
 		long startTime = System.nanoTime();
@@ -329,7 +615,6 @@ public class AliferousExperimental extends StateMachineGamer {
 		maxScore = 0;
 		while (timeout - System.currentTimeMillis() > BUF_TIME) {
 			for(Move move: myMoves) {
-				totalMoves.get(roleMap.get(myRole)).add(move);
 				int score = minScore(state, move, 0, 100, 0, max_depth, timeout);
 				if (score == 100) {
 					return move;
@@ -341,7 +626,6 @@ public class AliferousExperimental extends StateMachineGamer {
 			}
 			if (doneSearching) break;
 			max_depth++;
-			System.out.println("Moving to depth: " + Integer.toString(max_depth));
 			doneSearching = true;
 		}
 
@@ -349,48 +633,196 @@ public class AliferousExperimental extends StateMachineGamer {
 	}
 
 
+	/*
+	 * Finds the best score to take at any given point by searching the monte carlo tree we have created so far, uses minimax
+	 */
+	private Move bestMonteCarloScore(long timeout) throws TransitionDefinitionException,
+												MoveDefinitionException, GoalDefinitionException{
+
+		//Determines the amount of time available to search, which is half of totalTime - bufTime
+		//Chose a random move in case we can't decide
+		Node bestNode = currNode.getChildren().get(random.nextInt(currNode.getChildren().size()));
+		int max_depth = 1;
+		doneSearching = true;
+
+		//todo: also, if it finds something before time runs out
+		//While there is time left to search
+		int maxScore = 0;
+		System.out.println("Searching with " + (timeout - System.currentTimeMillis()) + " milli left");
+		while (timeout - System.currentTimeMillis() > MIN_TIME) {
+			//Find the maximum of all the children
+			for(Node childNode: currNode.getChildren()) {
+				int score;
+				if (singlePlayer) {
+					score = monteCarloMaxScore(childNode, 0, 100, 0, max_depth, timeout);
+				}
+				else {
+					score = monteCarloMinScore(childNode, 0, 100, 0, max_depth, timeout);
+				}
+				if (score == 100) {
+					System.out.println("returning 100");
+					return childNode.getMove();
+				}
+				if (score > maxScore) {
+					maxScore = score;
+					bestNode = childNode;
+				}
+			}
+			if (doneSearching) break;
+			max_depth++;
+			doneSearching = true;
+		}
+		System.out.println("Depth achieved: " + (max_depth - 1));
+
+		System.out.println("Chosen Node Score: " + bestNode.getScore());
+		System.out.println("Chosen Node visits: " + bestNode.getNumVisits());
+		return bestNode.getMove();
+	}
+
+	//Finds the node associated with the current state, used at the start of each turn
+	private void getCurrentStateNode(long timeout) throws MoveDefinitionException,
+													GoalDefinitionException, TransitionDefinitionException {
+		AliferousCachedBitSetStateMachine machine = (AliferousCachedBitSetStateMachine) getStateMachine();
+		//if there was no previous state, create one
+		if (currNode == null) {
+			System.out.println("No curr node");
+			currNode = new Node(getCurrentState(), null, null, true);
+		}
+		else {
+			Boolean foundNode = false;
+			//If it's single player then each state is the child of the previous state as there are no opponent moves
+			if (singlePlayer) {
+				for (Node childNode : currNode.getChildren()) {
+					if (childNode.getState().equals(getCurrentState())) {
+						currNode = childNode;
+						foundNode = true;
+					}
+					else {
+						machine.removeFromCache(currNode.getState());
+					}
+				}
+				if (!foundNode) {
+					System.out.println("currnode, but couldn't find state single player");
+					currNode = new Node(getCurrentState(), null, null, true);
+				}
+			}
+			//In multiplayer games each state is the grandchild of the previous state due to opponent nodes in between
+			else {
+				for (Node childNode : currNode.getChildren()) {
+					for (Node grandChildNode : childNode.getChildren()) {
+						if (grandChildNode.getState().equals(getCurrentState())) {
+							currNode = grandChildNode;
+							foundNode = true;
+						}
+						else {
+							machine.removeFromCache(currNode.getState());
+						}
+					}
+				}
+				if (!foundNode) {
+					System.out.println("currnode, but couldn't find state, multi");
+					currNode = new Node(getCurrentState(), null, null, true);
+				}
+			}
+		}
+		//To stop backpropagation at a reasonable point, set the parent to null
+		if (currNode.getParent() != null) {
+			machine.removeFromCache(currNode.getParent().getState());
+		}
+		currNode.setParent(null);
+		monteCarlo(timeout);
+	}
+
 	@Override
 	public Move stateMachineSelectMove(long  timeout)
 			throws TransitionDefinitionException, MoveDefinitionException, GoalDefinitionException {
 
+		if (findNode) {
+			getCurrentStateNode(timeout);
+		}
+		System.out.println("\nCurrentNode:");
+		currNode.printNode();
+		StateMachine machine = getStateMachine();
 		if (!init) {
-			StateMachine machine = getStateMachine();
+
 			for (int i = 0; i < machine.getRoles().size(); i++) {
 				totalMoves.add(new HashSet<Move> ());
 			}
 			init = true;
 		}
 
+		List<Move> moves = machine.getLegalMoves(getCurrentState(), getRole());
+
+		Move result;
+
+		int totalCharges = 0;
+
+		//start by doing MCTS on our current node
 		long startTime = System.currentTimeMillis();
-		while (System.currentTimeMillis() - startTime < SEARCH_TIME) {
-			findTerminalStates(getCurrentState(), startTime, SEARCH_TIME);
+		long searchTime = (timeout - startTime - MIN_TIME) / 2;
+		while (System.currentTimeMillis() < startTime + searchTime) {
+			monteCarlo(timeout);
+			totalCharges += 4;
 		}
-		return bestScore(timeout);
+		long timeTaken = System.currentTimeMillis() - startTime;
+		float averageCharges = 0.f;
+		if (timeTaken > 1000) {
+			averageCharges = totalCharges/(timeTaken/1000);
+		}
+		else {
+
+		}
+		System.out.println("\nTime taken in milliseconds: " + timeTaken);
+		System.out.println("Average experimental charges per second: " + averageCharges);
+		findNode = true;
+
+		//Only find the best move if there is more than 1 choice
+		if (moves.size() != 1) {
+			result = bestMonteCarloScore(timeout);
+		}
+		else {
+			result = moves.get(0);
+		}
+
+		//For the remaining time, do more MCTS
+		startTime = System.currentTimeMillis();
+		searchTime = (timeout - startTime - BUF_TIME) / 2;
+		long remainingTime = (timeout - System.currentTimeMillis() - BUF_TIME) / 1000;
+		System.out.println("\nRemaining time: " + remainingTime);
+		while (timeout - System.currentTimeMillis() > BUF_TIME) {
+			monteCarlo(timeout);
+			totalCharges += 4;
+		}
+		findNode = true;
+		return result;
+
 	}
 
-	@Override
-	public void stateMachineStop() {
+	private void cleanData() {
 		System.out.println("done");
 		totalMoves.clear();
 		totalStates.clear();
 		terminalStates.clear();
 		terminalStatesSeen.clear();
+
+		AliferousCachedBitSetStateMachine machine =(AliferousCachedBitSetStateMachine) getStateMachine();
+		machine.clearCache();
+
 		savedState = null;
+		singlePlayer = false;
 		init = false;
 		totalScores = 0;
 		maxScoreFound = 0;
 	}
 
 	@Override
+	public void stateMachineStop() {
+		cleanData();
+	}
+
+	@Override
 	public void stateMachineAbort() {
-		totalMoves.clear();
-		totalStates.clear();
-		init = false;
-		terminalStates.clear();
-		terminalStatesSeen.clear();
-		savedState = null;
-		totalScores = 0;
-		maxScoreFound = 0;
+		cleanData();
 	}
 
 	@Override
@@ -400,6 +832,12 @@ public class AliferousExperimental extends StateMachineGamer {
 	@Override
 	public String getName() {
 		return "Aliferous-Experimental";
+	}
+
+
+	//Utility functions. TODO: make utility class
+	public static int log2(int n){
+	    return 31 - Integer.numberOfLeadingZeros(n);
 	}
 
 }

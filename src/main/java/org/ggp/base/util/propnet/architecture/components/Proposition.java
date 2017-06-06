@@ -21,6 +21,8 @@ public class Proposition extends Component
 
 	private PropType type;
 
+	private int index; //index into the base array
+
 	/**
 	 * Creates a new Proposition with name <tt>name</tt>.
 	 *
@@ -74,6 +76,14 @@ public class Proposition extends Component
      */
     public void setType(PropType newType) {
     	type = newType;
+    }
+
+    public int getIndex() {
+    	return index;
+    }
+
+    public void setIndex(int newIndex) {
+    	index = newIndex;
     }
 
 	/**

@@ -1,6 +1,7 @@
 package org.ggp.base.util.statemachine.implementation.propnet;
 
 import java.util.ArrayList;
+import java.util.BitSet;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedList;
@@ -23,6 +24,7 @@ import org.ggp.base.util.propnet.architecture.components.Or;
 import org.ggp.base.util.propnet.architecture.components.Proposition;
 import org.ggp.base.util.propnet.architecture.components.Transition;
 import org.ggp.base.util.propnet.factory.OptimizingPropNetFactory;
+import org.ggp.base.util.statemachine.InternalMachineState;
 import org.ggp.base.util.statemachine.MachineState;
 import org.ggp.base.util.statemachine.Move;
 import org.ggp.base.util.statemachine.Role;
@@ -34,7 +36,7 @@ import org.ggp.base.util.statemachine.implementation.prover.query.ProverQueryBui
 
 
 
-public class AliferousCachedForwardPropNetStateMachine extends StateMachine {
+public class AliferousCachedBitSetStateMachine extends StateMachine {
 	/** The underlying proposition network  */
 	private PropNet propNet;
 	/** The topological ordering of the propositions */
@@ -52,26 +54,38 @@ public class AliferousCachedForwardPropNetStateMachine extends StateMachine {
 
 	private Boolean factoring;
 
-	private Map<MachineState, Set<Component> > cache;
+	private Map<InternalMachineState, Set<Component> > cache;
+	private Map<InternalMachineState, BitSet> cacheBitSets;
 
 	private ArrayList<Set<Component> > threadCache;
 
+	private ArrayList<BitSet> threadBitSets;
+
 	//private methods
 	//mark the bases of the propnet
-	private void markBases(MachineState state, Set<Component> bases) {
+	private void markBases(MachineState state, Set<Component> baseSet) {
+		if (state instanceof InternalMachineState) {
+			InternalMachineState iState = (InternalMachineState) state;
+			for (Proposition base : iState.getBases()) {
+				baseSet.add(base);
+			}
+			return;
+		}
+		System.out.println("There is a big problem: state is not internal");
 		Map<GdlSentence, Proposition> map = propNet.getBasePropositions();
 		Set<GdlSentence> sentences = state.getContents();
 		for (GdlSentence sentence : sentences) {
 			Proposition p = map.get(sentence);
-			bases.add(p);
+			baseSet.add(p);
 		}
+
 	}
 
-	private void markActions(List<Move> moves, Set<Component> inputs) {
+	private void markActions(List<Move> moves, Set<Component> inputSet) {
 		Map<GdlSentence, Proposition> map = propNet.getInputPropositions();
 		List<GdlSentence> does = toDoes(moves);
 		for (GdlSentence sentence : does) {
-			inputs.add(map.get(sentence));
+			inputSet.add(map.get(sentence));
 		}
 	}
 
@@ -227,11 +241,13 @@ public class AliferousCachedForwardPropNetStateMachine extends StateMachine {
 		int i = 0;
 		for (Proposition p : propNet.getInputPropositions().values()) {
 			inputs[i] = p;
+			p.setIndex(i);
 			i++;
 		}
 		i = 0;
 		for (Proposition p : propNet.getBasePropositions().values()) {
 			bases[i] = p;
+			p.setIndex(i);
 			i++;
 		}
 	}
@@ -253,13 +269,16 @@ public class AliferousCachedForwardPropNetStateMachine extends StateMachine {
 	@Override
 	public void initialize(List<Gdl> description) {
 		try {
-			cache = new HashMap<MachineState, Set<Component> >();
+			cache = new HashMap<InternalMachineState, Set<Component> >();
+			cacheBitSets = new HashMap<InternalMachineState, BitSet>();
 			threadCache = new ArrayList<Set<Component> >();
+			threadBitSets = new ArrayList<BitSet>();
 			propNet = OptimizingPropNetFactory.create(description);
 			setTypes();
 			roles = propNet.getRoles();
 			for (int i = 0; i < 8; i++) {
 				threadCache.add(new HashSet<Component>());
+				threadBitSets.add(new BitSet());
 			}
 			goodInputs = new HashSet<Move>();
 			if (roles.size() == 1) {
@@ -291,7 +310,6 @@ public class AliferousCachedForwardPropNetStateMachine extends StateMachine {
 		Set<Component> props = new HashSet<Component>();
 		markBases(state, props);
 		Boolean result = getPropValue(propNet.getTerminalProposition(), props);
-		//Boolean result = getPropMark(propNet.getTerminalProposition(), props);
 		return result;
 	}
 
@@ -334,7 +352,7 @@ public class AliferousCachedForwardPropNetStateMachine extends StateMachine {
 	 * and then computing the resulting state.
 	 */
 	@Override
-	public MachineState getInitialState() {
+	public InternalMachineState getInitialState() {
 		Set<Component> props = new HashSet<Component>();
 		props.add(propNet.getInitProposition());
 		forwardProp(props);
@@ -364,30 +382,52 @@ public class AliferousCachedForwardPropNetStateMachine extends StateMachine {
 		return moves;
 	}
 
-	public MachineState updateThreadCache(MachineState state, List<Move> moves, int index, Boolean newSet) throws TransitionDefinitionException {
+	public InternalMachineState updateThreadCache(MachineState state, List<Move> moves, int index, Boolean newSet) throws TransitionDefinitionException {
+		InternalMachineState internalState = (InternalMachineState)state;
 		if (!newSet) {
 			Set<Component> prevProps = threadCache.get(index);
-			Set<Component> newProps = getNextStateCached(state, moves, prevProps);
-			MachineState newState = getStateFromBase(newProps);
+			BitSet prevBitSet = threadBitSets.get(index);
+			BitSet intersection = new BitSet();
+			intersection.or(prevBitSet);
+			intersection.xor(internalState.getBitMask());
+			Set<Component> newProps = getNextStateCached(internalState, moves, prevProps, intersection);
+			InternalMachineState newState = getStateFromBase(newProps);
 			threadCache.set(index, newProps);
+			threadBitSets.set(index, internalState.getBitMask());
 			return newState;
 		}
-		Set<Component> props = new HashSet<Component>();
-		markBases(state, props);
-		markActions(moves, props);
-		forwardProp(props);
-		MachineState newState = getStateFromBase(props);
-		threadCache.set(index, props);
+		InternalMachineState newState;
+		Set<Component> newProps;
+		if (cache.containsKey(internalState)) {
+			Set<Component> prevProps = cache.get((InternalMachineState)state);
+
+			BitSet prevBitSet = cacheBitSets.get(internalState);
+			BitSet intersection = new BitSet();
+			intersection.or(prevBitSet);
+			intersection.xor(internalState.getBitMask());
+			newProps = getNextStateCached((InternalMachineState)state, moves, prevProps, intersection);
+
+			newState = getStateFromBase(newProps);
+		}
+		else {
+			newProps = new HashSet<Component>();
+			markBases(state, newProps);
+			markActions(moves, newProps);
+			forwardProp(newProps);
+			newState = getStateFromBase(newProps);
+		}
+		threadCache.set(index, newProps);
+		threadBitSets.set(index, internalState.getBitMask());
 		return newState;
 	}
 
-	private Set<Component> getNextStateCached(MachineState state, List<Move> moves, Set<Component> prevProps) throws TransitionDefinitionException {
+	private Set<Component> getNextStateCached(InternalMachineState state, List<Move> moves, Set<Component> prevProps, BitSet intersection)
+			throws TransitionDefinitionException {
 		Queue<Component> toUpdate = new LinkedList<Component>();
 		Set<Component> newProps = new HashSet<Component>(prevProps);
 
 		Set<Component> props = new HashSet<Component>();
 		markActions(moves, props);
-		markBases(state, props);
 
 		for (Component input : inputs) {
 			if (props.contains(input) && !prevProps.contains(input)) {
@@ -404,19 +444,23 @@ public class AliferousCachedForwardPropNetStateMachine extends StateMachine {
 			}
 		}
 
-		for (Component base : bases) {
-			if (props.contains(base) && !prevProps.contains(base)) {
-				for (Component o : base.getOutputArray()) {
-					toUpdate.add(o);
-				}
+		BitSet stateBitMask = state.getBitMask();
+
+		for (int i = intersection.nextSetBit(0); i >= 0; i = intersection.nextSetBit(i+1)) {
+
+			Component base = bases[i];
+			for (Component o : base.getOutputArray()) {
+				toUpdate.add(o);
+			}
+			if (stateBitMask.get(i)) {
 				newProps.add(base);
 			}
-			else if (!props.contains(base) && prevProps.contains(base)) {
-				for (Component o : base.getOutputArray()) {
-					toUpdate.add(o);
-				}
+			else {
 				newProps.remove(base);
 			}
+		    if (i == Integer.MAX_VALUE) {
+		        break; // or (i+1) would overflow
+		    }
 		}
 
 		while(!toUpdate.isEmpty()) {
@@ -465,24 +509,31 @@ public class AliferousCachedForwardPropNetStateMachine extends StateMachine {
 	@Override
 	public MachineState getNextState(MachineState state, List<Move> moves)
 			throws TransitionDefinitionException {
-		if (cache.containsKey(state)) {
-			Set<Component> prevProps = cache.get(state);
-			Set<Component> newProps = getNextStateCached(state, moves, prevProps);
+		InternalMachineState internalState = (InternalMachineState)state;
+		if (cache.containsKey(internalState)) {
+			Set<Component> prevProps = cache.get(internalState);
+			BitSet prevBitSet = cacheBitSets.get(internalState);
+			BitSet intersection = new BitSet();
+			intersection.or(prevBitSet);
+			intersection.xor(internalState.getBitMask());
+			Set<Component> newProps = getNextStateCached((InternalMachineState)state, moves, prevProps, intersection);
 
-			MachineState newState = getStateFromBase(newProps);
+			InternalMachineState newState = getStateFromBase(newProps);
 			cache.put(newState, newProps);
+			cacheBitSets.put(newState, internalState.getBitMask());
 			return newState;
 		}
 		Set<Component> props = new HashSet<Component>();
 		markBases(state, props);
 		markActions(moves, props);
 		forwardProp(props);
-		MachineState newState = getStateFromBase(props);
+		InternalMachineState newState = getStateFromBase(props);
 		cache.put(newState, props);
+		cacheBitSets.put(newState, internalState.getBitMask());
 		return newState;
 	}
 
-	private void findInputs(Proposition goal, Set<Move> inputs) {
+	private void findInputs(Proposition goal, Set<Move> inputSet) {
 		Set<Component> seen = new HashSet<Component>();
 		Queue<Component> toExplore = new LinkedList<Component>();
 		toExplore.add(goal);
@@ -495,7 +546,7 @@ public class AliferousCachedForwardPropNetStateMachine extends StateMachine {
 				if (input instanceof Proposition) {
 					Proposition p = (Proposition) input;
 					if ((p.getType() == Proposition.PropType.INPUT)) {
-						inputs.add(getMoveFromProposition(p));
+						inputSet.add(getMoveFromProposition(p));
 						continue;
 					}
 				}
@@ -548,10 +599,10 @@ public class AliferousCachedForwardPropNetStateMachine extends StateMachine {
 				continue;
 			}
 			maxScore = getGoalValue(goal);
-			Set<Move> inputs = new HashSet<Move>();
-			findInputs(goal, inputs);
+			Set<Move> inputSet = new HashSet<Move>();
+			findInputs(goal, inputSet);
 			bestGoal = goal;
-			goodInputs = inputs;
+			goodInputs = inputSet;
 		}
 
 		return newGoals.size();
@@ -565,7 +616,7 @@ public class AliferousCachedForwardPropNetStateMachine extends StateMachine {
 	 * The base propositions and input propositions should always be exempt
 	 * from this ordering.
 	 *
-	 * The base propositions values are set from the MachineState that
+	 * The base propositions values are set from the InternalMachineState that
 	 * operations are performed on and the input propositions are set from
 	 * the Moves that operations are performed on as well (if any).
 	 *
@@ -726,30 +777,35 @@ public class AliferousCachedForwardPropNetStateMachine extends StateMachine {
 	}
 
 	/**
-	 * A Naive implementation that computes a PropNetMachineState
+	 * A Naive implementation that computes a PropNetInternalMachineState
 	 * from the true BasePropositions.  This is correct but slower than more advanced implementations
 	 * You need not use this method!
-	 * @return PropNetMachineState
+	 * @return PropNetInternalMachineState
 	 */
-	public MachineState getStateFromBase(Set<Component> props)
+	public InternalMachineState getStateFromBase(Set<Component> props)
 	{
-		Set<GdlSentence> contents = new HashSet<GdlSentence>();
+		ArrayList<Proposition> stateBases = new ArrayList<Proposition>();
+		BitSet bitMask = new BitSet(bases.length);
 		for (Proposition p : bases)
 		{
 			if (props.contains(p.getSingleInput()))
 			{
-				contents.add(p.getName());
+				stateBases.add(p);
+				bitMask.set(p.getIndex());
 			}
-
 		}
-		return new MachineState(contents);
+		Proposition[] baseArray = new Proposition[stateBases.size()];
+		InternalMachineState state = new InternalMachineState(stateBases.toArray(baseArray), bitMask);
+		return state;
 	}
 
 	public void removeFromCache(MachineState state) {
-		cache.remove(state);
+		cache.remove((InternalMachineState)state);
+		cacheBitSets.remove((InternalMachineState)state);
 	}
 
 	public void clearCache() {
 		cache.clear();
+		cacheBitSets.clear();
 	}
 }

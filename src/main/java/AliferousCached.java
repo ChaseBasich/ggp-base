@@ -811,6 +811,9 @@ public class AliferousCached extends StateMachineGamer {
 		terminalStates.clear();
 		terminalStatesSeen.clear();
 
+		AliferousCachedForwardPropNetStateMachine machine =(AliferousCachedForwardPropNetStateMachine) getStateMachine();
+		machine.clearCache();
+
 		savedState = null;
 		singlePlayer = false;
 		init = false;
