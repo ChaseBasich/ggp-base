@@ -33,6 +33,7 @@ public class InternalMachineState extends MachineState {
 		return bitMask;
 	}
 
+
 	@Override
 	public InternalMachineState clone() {
 		return new InternalMachineState(bases.clone(), (BitSet) bitMask.clone());

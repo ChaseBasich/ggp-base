@@ -54,8 +54,8 @@ public class AliferousCachedBitSetStateMachine extends StateMachine {
 
 	private Boolean factoring;
 
-	private Map<InternalMachineState, Set<Component> > cache;
-	private Map<InternalMachineState, BitSet> cacheBitSets;
+	//private Map<InternalMachineState, Set<Component> > cache;
+	//private Map<InternalMachineState, BitSet> cacheBitSets;
 
 	private ArrayList<Set<Component> > threadCache;
 
@@ -269,8 +269,8 @@ public class AliferousCachedBitSetStateMachine extends StateMachine {
 	@Override
 	public void initialize(List<Gdl> description) {
 		try {
-			cache = new HashMap<InternalMachineState, Set<Component> >();
-			cacheBitSets = new HashMap<InternalMachineState, BitSet>();
+			//cache = new HashMap<InternalMachineState, Set<Component> >();
+			//cacheBitSets = new HashMap<InternalMachineState, BitSet>();
 			threadCache = new ArrayList<Set<Component> >();
 			threadBitSets = new ArrayList<BitSet>();
 			propNet = OptimizingPropNetFactory.create(description);
@@ -398,24 +398,11 @@ public class AliferousCachedBitSetStateMachine extends StateMachine {
 		}
 		InternalMachineState newState;
 		Set<Component> newProps;
-		if (cache.containsKey(internalState)) {
-			Set<Component> prevProps = cache.get((InternalMachineState)state);
-
-			BitSet prevBitSet = cacheBitSets.get(internalState);
-			BitSet intersection = new BitSet();
-			intersection.or(prevBitSet);
-			intersection.xor(internalState.getBitMask());
-			newProps = getNextStateCached((InternalMachineState)state, moves, prevProps, intersection);
-
-			newState = getStateFromBase(newProps);
-		}
-		else {
-			newProps = new HashSet<Component>();
-			markBases(state, newProps);
-			markActions(moves, newProps);
-			forwardProp(newProps);
-			newState = getStateFromBase(newProps);
-		}
+		newProps = new HashSet<Component>();
+		markBases(state, newProps);
+		markActions(moves, newProps);
+		forwardProp(newProps);
+		newState = getStateFromBase(newProps);
 		threadCache.set(index, newProps);
 		threadBitSets.set(index, internalState.getBitMask());
 		return newState;
@@ -510,26 +497,11 @@ public class AliferousCachedBitSetStateMachine extends StateMachine {
 	public MachineState getNextState(MachineState state, List<Move> moves)
 			throws TransitionDefinitionException {
 		InternalMachineState internalState = (InternalMachineState)state;
-		if (cache.containsKey(internalState)) {
-			Set<Component> prevProps = cache.get(internalState);
-			BitSet prevBitSet = cacheBitSets.get(internalState);
-			BitSet intersection = new BitSet();
-			intersection.or(prevBitSet);
-			intersection.xor(internalState.getBitMask());
-			Set<Component> newProps = getNextStateCached((InternalMachineState)state, moves, prevProps, intersection);
-
-			InternalMachineState newState = getStateFromBase(newProps);
-			cache.put(newState, newProps);
-			cacheBitSets.put(newState, internalState.getBitMask());
-			return newState;
-		}
 		Set<Component> props = new HashSet<Component>();
-		markBases(state, props);
+		markBases(internalState, props);
 		markActions(moves, props);
 		forwardProp(props);
 		InternalMachineState newState = getStateFromBase(props);
-		cache.put(newState, props);
-		cacheBitSets.put(newState, internalState.getBitMask());
 		return newState;
 	}
 
@@ -800,12 +772,12 @@ public class AliferousCachedBitSetStateMachine extends StateMachine {
 	}
 
 	public void removeFromCache(MachineState state) {
-		cache.remove((InternalMachineState)state);
-		cacheBitSets.remove((InternalMachineState)state);
+		//cache.remove((InternalMachineState)state);
+		//cacheBitSets.remove((InternalMachineState)state);
 	}
 
 	public void clearCache() {
-		cache.clear();
-		cacheBitSets.clear();
+		//cache.clear();
+	//	cacheBitSets.clear();
 	}
 }

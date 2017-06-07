@@ -650,6 +650,7 @@ public class AliferousExperimental extends StateMachineGamer {
 		int maxScore = 0;
 		System.out.println("Searching with " + (timeout - System.currentTimeMillis()) + " milli left");
 		while (timeout - System.currentTimeMillis() > MIN_TIME) {
+			System.out.println("searching");
 			//Find the maximum of all the children
 			for(Node childNode: currNode.getChildren()) {
 				int score;
@@ -661,6 +662,9 @@ public class AliferousExperimental extends StateMachineGamer {
 				}
 				if (score == 100) {
 					System.out.println("returning 100");
+					if (childNode.getDepth() == 5) {
+						childNode.printNode();
+					}
 					return childNode.getMove();
 				}
 				if (score > maxScore) {

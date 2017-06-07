@@ -50,7 +50,12 @@ public class Node {
 
 	public float getScore() {
 		if (isTerminal || seenTerminal) {
-			return score;
+			if (maxNode) {
+				return (int) max;
+			}
+			else {
+				return (int) min;
+			}
 		}
 		return Math.max(Math.min(score, 99), 1);
 	}
@@ -132,11 +137,12 @@ public class Node {
 	public void printNode() {
 		System.out.println("Node: " + state.toString());
 		System.out.println("Move: " + move);
-		System.out.println("Score: " + score);
+		System.out.println("Score: " + getScore());
 		System.out.println("Depth: " + depth);
 		System.out.println("Visits: " + numVisits);
 		System.out.println("Children: " + childNodes.size());
 		System.out.println("Max?: " + maxNode);
+		System.out.println("See? " + seenTerminal);
 	}
 
 	public static void printTree(Node node) {
