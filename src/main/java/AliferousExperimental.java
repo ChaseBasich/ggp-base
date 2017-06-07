@@ -32,6 +32,8 @@ public class AliferousExperimental extends StateMachineGamer {
 	//Number of depth charges per state; we can make this dynamic
 	private static final int NUM_CHARGES = 8;
 
+	private static final int HEURISTIC_TIME = 150;
+
 	//Used for heuristics
 	private Boolean usingHeuristics;
 	private int maxScoreFound;
@@ -100,11 +102,11 @@ public class AliferousExperimental extends StateMachineGamer {
 		}
 
 		long startTime = System.currentTimeMillis();
-		depthCharge(state, timeout, false, 0);
+		depthCharge(state, timeout, true, 0);
 		long totalTime = System.currentTimeMillis() - startTime;
-		usingHeuristics = (totalTime >= 20);
+		usingHeuristics = (totalTime >= HEURISTIC_TIME);
 		if (usingHeuristics) {
-			System.out.println("using heuristics");
+			System.out.println("using heuristics as time was: " + totalTime);
 		}
 
 		//Call montecarlo until we're out of search time
@@ -922,7 +924,7 @@ public class AliferousExperimental extends StateMachineGamer {
 		System.out.println("\nRemaining time: " + remainingTime);
 		while (timeout - System.currentTimeMillis() > BUF_TIME) {
 			monteCarlo(timeout);
-			totalCharges += 4;
+			totalCharges += NUM_CHARGES;
 		}
 		findNode = true;
 		return result;
