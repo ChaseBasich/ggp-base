@@ -860,10 +860,12 @@ public class AliferousPropNetPlayer extends StateMachineGamer {
 			init = true;
 		}
 
+		//If depth charges take too long, run standard heuristic player
 		if(useHeuristics) {
 			return bestHeuristicScore(timeout);
 		}
 
+		//Update the current location int he tree we're constructing
 		if (findNode) {
 			getCurrentStateNode(timeout);
 		}
@@ -906,7 +908,7 @@ public class AliferousPropNetPlayer extends StateMachineGamer {
 		System.out.println("\nRemaining time: " + remainingTime);
 		while (timeout - System.currentTimeMillis() > BUF_TIME) {
 			monteCarlo(timeout);
-			totalCharges += 4;
+			totalCharges += NUM_CHARGES;
 		}
 		findNode = true;
 		return result;

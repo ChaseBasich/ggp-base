@@ -382,6 +382,17 @@ public class AliferousCachedBitSetStateMachine extends StateMachine {
 		return moves;
 	}
 
+	/**
+	 * Updates the state for a given depth charge. The depth charge is identified by the index, which
+	 * corresponds to the entry in the threadcache.
+	 *
+	 * @param state The current state
+	 * @param moves The moves for each player
+	 * @param index The index of the thread; this corresponds to the entry in the thread cache
+	 * @param newSet Whether or not this refers to a new depth charge. If not, then we can use the thread cache
+	 * @return The new state, based on the moves that were input
+	 * @throws TransitionDefinitionException
+	 */
 	public InternalMachineState updateThreadCache(MachineState state, List<Move> moves, int index, Boolean newSet) throws TransitionDefinitionException {
 		InternalMachineState internalState = (InternalMachineState)state;
 		if (!newSet) {
@@ -408,6 +419,9 @@ public class AliferousCachedBitSetStateMachine extends StateMachine {
 		return newState;
 	}
 
+	/*
+	 * Runs differential propagation on the state, given the cached set or components
+	 */
 	private Set<Component> getNextStateCached(InternalMachineState state, List<Move> moves, Set<Component> prevProps, BitSet intersection)
 			throws TransitionDefinitionException {
 		Queue<Component> toUpdate = new LinkedList<Component>();
@@ -416,6 +430,7 @@ public class AliferousCachedBitSetStateMachine extends StateMachine {
 		Set<Component> props = new HashSet<Component>();
 		markActions(moves, props);
 
+		//Find the inputs that are not in common
 		for (Component input : inputs) {
 			if (props.contains(input) && !prevProps.contains(input)) {
 				newProps.add(input);
@@ -433,6 +448,7 @@ public class AliferousCachedBitSetStateMachine extends StateMachine {
 
 		BitSet stateBitMask = state.getBitMask();
 
+		//Find the bases that aren't in common
 		for (int i = intersection.nextSetBit(0); i >= 0; i = intersection.nextSetBit(i+1)) {
 
 			Component base = bases[i];
@@ -450,6 +466,8 @@ public class AliferousCachedBitSetStateMachine extends StateMachine {
 		    }
 		}
 
+
+		//Forward propagate from each of the changed bases and inputs
 		while(!toUpdate.isEmpty()) {
 			Component c = toUpdate.poll();
 			Boolean newValue = false;
@@ -505,6 +523,9 @@ public class AliferousCachedBitSetStateMachine extends StateMachine {
 		return newState;
 	}
 
+	/*
+	 * Finds all of the inputs that can lead to a given goal, used in factoring
+	 */
 	private void findInputs(Proposition goal, Set<Move> inputSet) {
 		Set<Component> seen = new HashSet<Component>();
 		Queue<Component> toExplore = new LinkedList<Component>();
@@ -528,6 +549,9 @@ public class AliferousCachedBitSetStateMachine extends StateMachine {
 		}
 	}
 
+	/*
+	 * Factors the propnet for the given role. Only to be used in single player games
+	 */
 	public int numSubGames(Role role) {
 		Set<Proposition> goals = propNet.getGoalPropositions().get(role);
 		Set<Proposition> removedGoals = new HashSet<Proposition>();
@@ -671,6 +695,9 @@ public class AliferousCachedBitSetStateMachine extends StateMachine {
 		}
 	}
 
+	/*
+	 * Used to verify correct ordering after topological sort.
+	 */
 	public Boolean verifySort() {
 		Set<Component> seenComponents = new HashSet<Component>();
 		for (Component c : ordering) {
@@ -771,6 +798,8 @@ public class AliferousCachedBitSetStateMachine extends StateMachine {
 		return state;
 	}
 
+
+	//While these methods are no longer relevant, certain players still call them, making it difficult to remove them entire at this point
 	public void removeFromCache(MachineState state) {
 		//cache.remove((InternalMachineState)state);
 		//cacheBitSets.remove((InternalMachineState)state);

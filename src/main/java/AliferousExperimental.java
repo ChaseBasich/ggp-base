@@ -278,14 +278,12 @@ public class AliferousExperimental extends StateMachineGamer {
 		if (machine.isTerminal(state)) {
 			return machine.getGoal(state, getRole());
 		}
-		//if (outOfTime(timeout)) {
-		//	return 0;
-		//}
 		List<Move> moves = machine.getRandomJointMove(state);
 		MachineState nextState = machine.updateThreadCache(state, moves, index, newSet);
 		return depthCharge(nextState, timeout, false, index);
 	}
 
+	//Prioritizes horizontal expansion of the tree in general
 	private float selectionScore(Node node, Node parentNode) {
 		float score = node.getScore();
 
@@ -293,6 +291,10 @@ public class AliferousExperimental extends StateMachineGamer {
 		return score;
 	}
 
+	/*
+	 * Selects which node to expand next. If all of the children of the node are terminal or have perfect knowledge
+	 * of the rest of the game, this node is marked as having that knowledge too
+	 */
 	private Node select(Node node, long timeout) throws MoveDefinitionException,
 														GoalDefinitionException, TransitionDefinitionException {
 		if (node.getNumVisits() == 0 || node.getChildren().size() == 0) {
@@ -342,6 +344,9 @@ public class AliferousExperimental extends StateMachineGamer {
 		return select(bestNode, timeout);
 	}
 
+	/*
+	 * Expansion phase. Adds the child nodes to the tree, one for each move.
+	 */
 	private void expand(Node node) throws MoveDefinitionException, TransitionDefinitionException, GoalDefinitionException {
 
 		StateMachine machine = getStateMachine();
@@ -391,6 +396,9 @@ public class AliferousExperimental extends StateMachineGamer {
 		}
 	}
 
+	/*
+	 * Creates threads to send depth charges
+	 */
 	private float simulate(Node node, long timeout) throws GoalDefinitionException, MoveDefinitionException, TransitionDefinitionException {
 		float total = 0;
 		final float[] results = new float[NUM_CHARGES];
@@ -445,6 +453,7 @@ public class AliferousExperimental extends StateMachineGamer {
 		backpropagate(selected, score);
 	}
 
+	//Currently unused
 	private int monteCarloSearch(MachineState state, long timeout) throws GoalDefinitionException,
 																	MoveDefinitionException, TransitionDefinitionException {
 		int total = 0;
@@ -529,119 +538,13 @@ public class AliferousExperimental extends StateMachineGamer {
 	}
 
 
+	//--------------------------------------------------------------------------------------------
+	//heuristic minimax
+	//--------------------------------------------------------------------------------------------
 
-	//---------------------------------------------------------------------------------------------
-	//Minimax Methods
-	//---------------------------------------------------------------------------------------------
-
-	private int maxScore(MachineState state, int alpha, int beta, int level, int max_level, long timeout) throws TransitionDefinitionException,
-															MoveDefinitionException, GoalDefinitionException{
-
-		StateMachine machine = getStateMachine();
-		Role myRole = getRole();
-		if(machine.isTerminal(state)) {
-			return machine.getGoal(state, myRole);
-		}
-
-		if (outOfTime(timeout)) {
-			doneSearching = false;
-			return alpha;//TODO: discuss doing heuristic
-		}
-		if (level > max_level || searchTime(timeout)) {
-			doneSearching = false;
-			return (int)monteCarloSearch(state, timeout);
-		}
-
-		List<Move> myMoves = machine.getLegalMoves(state, myRole);
-
-		Map<Role, Integer> roleMap = machine.getRoleIndices();
-
-		for(Move move: myMoves) {
-			totalMoves.get(roleMap.get(myRole)).add(move);
-			alpha = Math.max(minScore(state, move, alpha, beta, level, max_level, timeout), alpha);
-			if (alpha >= beta) {
-				return beta;
-			}
-		}
-		return alpha;
-	}
-
-	private int minScore(MachineState state, Move myMove, int alpha, int beta, int level, int max_level, long timeout) throws TransitionDefinitionException,
-															MoveDefinitionException, GoalDefinitionException{
-
-		StateMachine machine = getStateMachine();
-
-		List< List<Move> > jointMoves = machine.getLegalJointMoves(state, getRole(), myMove);
-
-		Map<Role, Integer> indices = machine.getRoleIndices();
-
-		if (outOfTime(timeout)) {
-			doneSearching = false;
-			return alpha; //discuss doing heuristic
-		}
-		if (searchTime(timeout)) {
-			return (int)monteCarloSearch(state, timeout);
-		}
-
-		Map<Role, Integer> roleMap = machine.getRoleIndices();
-		List<Role> roles = machine.getRoles();
-		for (int i = 0; i < roles.size(); i++) {
-			if (roles.get(i).equals(getRole())) continue;
-			List<Move> moves = machine.getLegalMoves(state, roles.get(i));
-			for (Move move : moves) {
-				totalMoves.get(i).add(move);
-			}
-		}
-
-
-
-		for(List<Move> moves : jointMoves) {
-			MachineState nextState = machine.getNextState(state, moves);
-
-			beta = Math.min(maxScore(nextState, alpha, beta, level + 1, max_level, timeout), beta);
-			if (beta <= alpha) {
-				return alpha;
-			}
-		}
-		return beta;
-	}
-
-	private Move bestScore(long timeout) throws TransitionDefinitionException,
-									MoveDefinitionException, GoalDefinitionException{
-
-		MachineState state = getCurrentState();
-		StateMachine machine = getStateMachine();
-		Role myRole = getRole();
-
-		List<Move> myMoves = machine.getLegalMoves(state, myRole);
-
-		int maxScore = 0;
-		long startTime = System.nanoTime();
-		Move bestMove = myMoves.get(random.nextInt(myMoves.size()));
-		int max_depth = 1;
-		doneSearching = true;
-
-		Map<Role, Integer> roleMap = machine.getRoleIndices();
-		//todo: also, if it finds something before time runs out
-		maxScore = 0;
-		while (timeout - System.currentTimeMillis() > BUF_TIME) {
-			for(Move move: myMoves) {
-				int score = minScore(state, move, 0, 100, 0, max_depth, timeout);
-				if (score == 100) {
-					return move;
-				}
-				if (score > maxScore) {
-					maxScore = score;
-					bestMove = move;
-				}
-			}
-			if (doneSearching) break;
-			max_depth++;
-			doneSearching = true;
-		}
-
-		return bestMove;
-	}
+		/*
+		 * For use when depth charges are taking too long. Runs a standard increasing depth minimax with heuristics
+		 */
 
 	private int maxHeuristicScore(MachineState state, int alpha, int beta, int level, int max_level, long timeout) throws TransitionDefinitionException,
 	MoveDefinitionException, GoalDefinitionException{
@@ -757,6 +660,14 @@ public class AliferousExperimental extends StateMachineGamer {
 			return bestMove;
 	}
 
+	//--------------------------------------------------------------------------------------------
+	// Move selection methods
+	//--------------------------------------------------------------------------------------------
+
+		/*
+		 * Methods responsible for choosing the next move
+		 */
+
 
 	/*
 	 * Finds the best score to take at any given point by searching the monte carlo tree we have created so far, uses minimax
@@ -866,6 +777,7 @@ public class AliferousExperimental extends StateMachineGamer {
 	public Move stateMachineSelectMove(long  timeout)
 			throws TransitionDefinitionException, MoveDefinitionException, GoalDefinitionException {
 
+		//If we're using depth charges, then update the tree we're constructing
 		if (findNode && !usingHeuristics) {
 			getCurrentStateNode(timeout);
 			System.out.println("\nCurrentNode:");
